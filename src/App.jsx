@@ -175,7 +175,11 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState(null);
   const [rndColor, setRndColor] = useState("#8020e0");
   const [rndColorIdx, setRndColorIdx] = useState(0);
-  const [theme, setTheme] = useState(() => localStorage.getItem('born-slippy-theme') || 'light');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('born-slippy-theme');
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [midiAccess, setMidiAccess] = useState(null);
   const [midiOutputs, setMidiOutputs] = useState([]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
