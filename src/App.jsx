@@ -568,7 +568,7 @@ export default function App() {
 
         {(()=>{
           const playBtnRef = {t:null};
-          const onDown=()=>{ playBtnRef.t=setTimeout(()=>{ playBtnRef.t="long"; playing?stopSeq(true):(() =>{seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);})(); },600); };
+          const onDown=()=>{ playBtnRef.t=setTimeout(()=>{ playBtnRef.t="long"; playing?stopSeq(true):(() =>{seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);})(); },1500); };
           const onUp=()=>{ if(playBtnRef.t==="long"){playBtnRef.t=null;return;} if(playBtnRef.t)clearTimeout(playBtnRef.t); playBtnRef.t=null; playing?stopSeq(false):startSeq(); };
           const onCancel=()=>{ if(playBtnRef.t&&playBtnRef.t!=="long")clearTimeout(playBtnRef.t); playBtnRef.t=null; };
           return(<button
