@@ -1,6 +1,6 @@
-# Underworld Groove Export
+# Born Slippy music electronica app
 
-This folder contains a standalone React + Vite project for the Underworld Groove drum sequencer app.
+This folder contains a standalone React + Vite project for the Born Slippy groove drum sequencer app.
 
 ## What is included
 
