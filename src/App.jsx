@@ -86,8 +86,8 @@ function createDistortionCurve(amount) {
   const s=44100,c=new Float32Array(s);for(let i=0;i<s;i++){const x=(i*2)/s-1;c[i]=((3+amount)*x*20*(Math.PI/180))/(Math.PI+amount*Math.abs(x));}return c;
 }
 
-async function persistSlots(slots) { try { await window.storage.set("born-slippy-slots", JSON.stringify(slots)); } catch(e){} }
-async function loadSlotsAsync() { try { const r = await window.storage.get("born-slippy-slots"); if(r&&r.value) return JSON.parse(r.value); } catch(e){} return null; }
+function persistSlots(slots) { try { localStorage.setItem("born-slippy-slots", JSON.stringify(slots)); } catch(e){} }
+function loadSlotsAsync() { try { const r = localStorage.getItem("born-slippy-slots"); if(r) return Promise.resolve(JSON.parse(r)); } catch(e){} return Promise.resolve(null); }
 
 function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020", muted, onMute, isDark=true }) {
   const trackRef = useRef(null);
@@ -174,7 +174,7 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState(null);
   const [rndColor, setRndColor] = useState("#8020e0");
   const [rndColorIdx, setRndColorIdx] = useState(0);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('born-slippy-theme') || 'light');
   const [midiAccess, setMidiAccess] = useState(null);
   const [midiOutputs, setMidiOutputs] = useState([]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
@@ -249,7 +249,8 @@ export default function App() {
   const getChannelSnapshot = useCallback(() => ({
     bassVol, kickVol, hatVol, clapVol, filterCut, delayMix, drive,
     bassMute, kickMute, hatMute, clapMute, filterMute, delayMute, driveMute,
-  }), [bassVol,kickVol,hatVol,clapVol,filterCut,delayMix,drive,bassMute,kickMute,hatMute,clapMute,filterMute,delayMute,driveMute]);
+    noteDown, thirdUp,
+  }), [bassVol,kickVol,hatVol,clapVol,filterCut,delayMix,drive,bassMute,kickMute,hatMute,clapMute,filterMute,delayMute,driveMute,noteDown,thirdUp]);
 
   // Restore channel state from a snapshot
   const restoreChannelSnapshot = useCallback((snap) => {
@@ -268,6 +269,8 @@ export default function App() {
     if (snap.filterMute !== undefined) setFilterMute(snap.filterMute);
     if (snap.delayMute !== undefined) setDelayMute(snap.delayMute);
     if (snap.driveMute !== undefined) setDriveMute(snap.driveMute);
+    if (snap.noteDown !== undefined) setNoteDown(snap.noteDown);
+    if (snap.thirdUp !== undefined) setThirdUp(snap.thirdUp);
   }, []);
 
   const startFade = useCallback((targetChannels) => {
@@ -441,6 +444,7 @@ export default function App() {
   useEffect(()=>{const n=nodesRef.current;if(n.delaySend)n.delaySend.gain.value=delayMute?0:delayMix;},[delayMix,delayMute]);
   useEffect(()=>{const n=nodesRef.current;if(n.bassDistortion)n.bassDistortion.curve=createDistortionCurve(driveMute?0:drive*50);},[drive,driveMute]);
   useEffect(()=>()=>{if(timerRef.current)clearTimeout(timerRef.current);if(fadeTimerRef.current)clearInterval(fadeTimerRef.current);},[]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-theme', theme); },[theme]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
   const displayPat=patterns[activePattern]||FIXED_PATTERNS[0];
@@ -457,8 +461,8 @@ export default function App() {
 
       <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
         {FIXED_PATTERNS.map((pat,idx)=>{
-          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;
-          return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"9px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, background:isA?"#e05020":isQ?(theme === 'dark' ? "#2a1a14" : "#f5d5c0"):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?"2px solid #e05020":isA?"2px solid #e05020":`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#0d0d0d":isQ?"#e05020":(theme === 'dark' ? "#666" : "#222") }}>
+          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=PATTERN_COLORS[idx];
+          return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"9px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, background:isA?pc:isQ?(theme === 'dark' ? `${pc}22` : `${pc}18`):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?`2px solid ${pc}`:isA?`2px solid ${pc}`:`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#fff":isQ?pc:(theme === 'dark' ? "#666" : "#222") }}>
             {pat.name}{isQ&&<div style={{fontSize:6,marginTop:1,opacity:0.8}}>NEXT</div>}
           </button>);
         })}
@@ -511,8 +515,8 @@ export default function App() {
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
           ...btn, width:50, height:50, borderRadius:10, fontSize:20,
           background:theme==='dark'?'#161616':'#e0e0e0',
-          border:`2px solid ${theme==='dark'?'#2a2a2a':'#ccc'}`,
-          color:theme==='dark'?'#555':'#666',
+          border:`2px solid ${theme==='dark'?'#444':'#ccc'}`,
+          color:theme==='dark'?'#ffffff':'#666',
           display:"flex", alignItems:"center", justifyContent:"center",
         }}>{theme === 'dark' ? '☀' : '🌙'}</button>
       </div>
