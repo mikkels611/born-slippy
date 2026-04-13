@@ -714,6 +714,10 @@ export default function App() {
           Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
         </div>
       </div>
+
+      <div style={{ fontSize:8, color:theme === 'dark' ? "#333" : "#aaa", textAlign:"center", paddingBottom:8 }}>
+        v{__APP_VERSION__}
+      </div>
     </div>
   );
 }
