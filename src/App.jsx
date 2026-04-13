@@ -121,14 +121,14 @@ function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020",
   );
 }
 
-function SlotButton({ idx, filled, isActive, slotColor, onTap, onLongPress, btnBase, isDark=true }) {
+function SlotButton({ idx, filled, isActive, isPending, slotColor, onTap, onLongPress, btnBase, isDark=true }) {
   const timerRef = useRef(null);
   const c = slotColor || "#8020e0";
   const handleDown = () => { if(filled) timerRef.current = setTimeout(()=>{onLongPress();timerRef.current="deleted";}, 600); };
   const handleUp = () => { if(timerRef.current==="deleted"){timerRef.current=null;return;} if(timerRef.current)clearTimeout(timerRef.current); timerRef.current=null; onTap(); };
   const handleCancel = () => { if(timerRef.current&&timerRef.current!="deleted")clearTimeout(timerRef.current); };
   const bg = isActive ? c : filled ? `${c}38` : (isDark ? "#111" : "#f3f3f3");
-  const border = `2px solid ${isActive ? c : filled ? c : (isDark ? "#222" : "#bbb")}`;
+  const border = isPending ? `2px dashed ${c}` : `2px solid ${isActive ? c : filled ? c : (isDark ? "#222" : "#bbb")}`;
   const textColor = isActive ? "#fff" : filled ? c : (isDark ? "#ddd" : "#333");
   return (
     <button onMouseDown={handleDown} onMouseUp={handleUp} onMouseLeave={handleCancel}
@@ -138,7 +138,7 @@ function SlotButton({ idx, filled, isActive, slotColor, onTap, onLongPress, btnB
         border: border,
         color: textColor,
         display:"flex", alignItems:"center", justifyContent:"center",
-        boxShadow: isActive ? `0 0 10px ${c}88` : filled ? `0 0 6px ${c}44` : "none",
+        boxShadow: isActive ? `0 0 10px ${c}88` : isPending ? `0 0 8px ${c}66` : filled ? `0 0 6px ${c}44` : "none",
         userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
       }}
     >
@@ -186,9 +186,10 @@ export default function App() {
   const midiChannels = { bass: 1, kick: 2, hats: 3, clap: 4 }; // Default channels 1-4
   const [fadeMode, setFadeMode] = useState(() => localStorage.getItem('born-slippy-fade') !== 'false');
   const [fadeSteps, setFadeSteps] = useState(16);
-  const [seqPlay, setSeqPlay] = useState(false);
-  const [seqBars, setSeqBars] = useState(4);
+  const [seqPlay, setSeqPlay] = useState(()=>localStorage.getItem('born-slippy-seqplay')==='true');
+  const [seqBars, setSeqBars] = useState(()=>parseInt(localStorage.getItem('born-slippy-seqbars'))||4);
   const [seqCurrentSlot, setSeqCurrentSlot] = useState(-1);
+  const [seqPendingSlot, setSeqPendingSlot] = useState(-1);
 
   const ctxRef=useRef(null); const timerRef=useRef(null); const stepRef=useRef(0);
   const nodesRef=useRef({}); const activePatternRef=useRef(0);
@@ -209,6 +210,7 @@ export default function App() {
   const seqBarsRef=useRef(4);
   const seqCurrentSlotRef=useRef(-1);
   const seqBarCountRef=useRef(0);
+  const seqPendingSlotRef=useRef(null);
   const savedSlotsRef=useRef(Array(24).fill(null));
   const restoreSnapshotRef=useRef(null);
 
@@ -327,7 +329,7 @@ export default function App() {
 
   const playBass=useCallback((ctx,time,freq,accent)=>{
     if(freq===0||mutesRef.current.bass)return;const f=freq*getPitch();
-    sendMidiNote(midiChannels.bass, 33, accent); // Send MIDI note for bass
+    sendMidiNote(midiChannels.bass, Math.round(12 * Math.log2(freq * getPitch() / 440) + 69), accent); // Send MIDI note for bass
     const o=ctx.createOscillator(),o2=ctx.createOscillator(),env=ctx.createGain();
     o.type="sawtooth";o.frequency.setValueAtTime(f,time);o2.type="square";o2.frequency.setValueAtTime(f*1.002,time);o2.detune.setValueAtTime(-8,time);
     env.gain.setValueAtTime(0,time);env.gain.linearRampToValueAtTime(accent*0.35,time+0.008);
@@ -376,25 +378,34 @@ export default function App() {
       if(pendingPatternsRef.current!==null){patternsRef.current=pendingPatternsRef.current;const pp=pendingPatternsRef.current;pendingPatternsRef.current=null;setTimeout(()=>setPatterns(pp),0);}
       if(seqModeRef.current){
         seqBarCountRef.current++;
-        if(seqBarCountRef.current>=seqBarsRef.current){
+        const pendingSlot=seqPendingSlotRef.current;
+        const barsDue=seqBarCountRef.current>=seqBarsRef.current;
+        if(pendingSlot!==null||barsDue){
           seqBarCountRef.current=0;
           const slots=savedSlotsRef.current;
-          const cur=seqCurrentSlotRef.current;
-          const start=(cur<0?0:(cur+1))%24;
-          for(let i=0;i<24;i++){
-            const idx=(start+i)%24;
-            if(slots[idx]!==null){
-              seqCurrentSlotRef.current=idx;
-              const slot=slots[idx];
-              const arr=slot.fixedIndex>=0?FIXED_PATTERNS:[...FIXED_PATTERNS,slot];
-              const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
-              pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
-              setTimeout(()=>{
-                setSeqCurrentSlot(idx); setActiveSlot(idx);
-                if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
-              },0);
-              break;
+          let nextIdx=null;
+          if(pendingSlot!==null&&slots[pendingSlot]!==null){
+            nextIdx=pendingSlot;
+            seqPendingSlotRef.current=null;
+            setTimeout(()=>setSeqPendingSlot(-1),0);
+          } else {
+            const cur=seqCurrentSlotRef.current;
+            const start=(cur<0?0:(cur+1))%24;
+            for(let i=0;i<24;i++){
+              const idx=(start+i)%24;
+              if(slots[idx]!==null){nextIdx=idx;break;}
             }
+          }
+          if(nextIdx!==null){
+            seqCurrentSlotRef.current=nextIdx;
+            const slot=slots[nextIdx];
+            const arr=slot.fixedIndex>=0?FIXED_PATTERNS:[...FIXED_PATTERNS,slot];
+            const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
+            pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
+            setTimeout(()=>{
+              setSeqCurrentSlot(nextIdx); setActiveSlot(nextIdx);
+              if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
+            },0);
           }
         }
       }
@@ -409,7 +420,7 @@ export default function App() {
     const ctx=initAudio();
     if(ctx.state==="suspended"||ctx.state==="interrupted") await ctx.resume();
     stepRef.current=0; pendingPatternRef.current=null; pendingPatternsRef.current=null;
-    seqBarCountRef.current=0;
+    seqBarCountRef.current=-1;
     if(seqModeRef.current){
       const slots=savedSlotsRef.current;
       let cur=seqCurrentSlotRef.current;
@@ -427,12 +438,15 @@ export default function App() {
     }
     let nextTime=ctx.currentTime+0.05;
     const sched=()=>{while(nextTime<ctx.currentTime+0.2){scheduleStep(ctx,stepRef.current,nextTime);const s=stepRef.current%STEPS;setTimeout(()=>setCurrentStep(s),(nextTime-ctx.currentTime)*1000);nextTime+=STEP_TIME;stepRef.current++;}timerRef.current=setTimeout(sched,100);};
+    playingRef.current=true;
     sched();setPlaying(true);
   },[initAudio,scheduleStep,selectedPattern]);
 
   const stopSeq=useCallback((reset=false)=>{
+    playingRef.current=false;
     if(timerRef.current)clearTimeout(timerRef.current);
     setPlaying(false);setCurrentStep(-1);
+    seqPendingSlotRef.current=null;setSeqPendingSlot(-1);
     if(reset){seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);}
   },[]);
 
@@ -453,6 +467,11 @@ export default function App() {
 
   const handleSlotTap=useCallback((idx)=>{
     const filled=savedSlots[idx]!==null;
+    if(filled&&seqModeRef.current&&playingRef.current){
+      seqPendingSlotRef.current=idx;
+      setSeqPendingSlot(idx);
+      return;
+    }
     if(filled){
       if (fadeActiveRef.current) {
         if (fadeTimerRef.current) clearInterval(fadeTimerRef.current);
@@ -519,6 +538,8 @@ export default function App() {
   },[]);
   useEffect(()=>{ localStorage.setItem('born-slippy-theme', theme); },[theme]);
   useEffect(()=>{ localStorage.setItem('born-slippy-fade', fadeMode); },[fadeMode]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-seqplay', seqPlay); },[seqPlay]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-seqbars', seqBars); },[seqBars]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
   const displayPat=patterns[activePattern]||FIXED_PATTERNS[0];
@@ -633,8 +654,9 @@ export default function App() {
           <div key={off} style={{ display:"flex", gap:5, marginBottom:off<18?5:0, justifyContent:"center" }}>
             {Array.from({length:6}).map((_,i)=>{const idx=off+i;
               const isSeqActive=seqPlay&&seqCurrentSlot===idx;
+              const isSeqPending=seqPlay&&seqPendingSlot===idx;
               return(<SlotButton key={idx} idx={idx}
-                filled={savedSlots[idx]!==null} isActive={activeSlot===idx||isSeqActive}
+                filled={savedSlots[idx]!==null} isActive={activeSlot===idx||isSeqActive} isPending={isSeqPending}
                 slotColor={savedSlots[idx]?.color || rndColor}
                 onTap={()=>handleSlotTap(idx)} onLongPress={()=>handleSlotDelete(idx)} btnBase={btn} isDark={theme === 'dark'}
               />);
@@ -668,14 +690,14 @@ export default function App() {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
           <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
             <input type="checkbox" checked={seqPlay} onChange={(e) => setSeqPlay(e.target.checked)} style={{ marginRight:4 }} />
-            Play slots in sequence
+            Play patterns in sequence
           </label>
           <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
             Bars: <input type="number" min="1" max="64" value={seqBars} onChange={(e) => setSeqBars(parseInt(e.target.value) || 4)} style={{ width:44, background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:2, borderRadius:3 }} />
           </label>
         </div>
         <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
-          {seqPlay ? `Each slot plays ${seqBars} bar${seqBars>1?"s":""} • TAP STOP = pause • HOLD STOP = reset to slot 1` : "Enable to auto-advance through filled memory slots"}
+          {seqPlay ? `Each pattern plays ${seqBars} bar${seqBars>1?"s":""} • TAP pattern to queue next • TAP STOP = pause • HOLD STOP = reset` : "Enable to auto-advance through filled patterns"}
         </div>
       </div>
 
