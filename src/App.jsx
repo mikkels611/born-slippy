@@ -357,8 +357,9 @@ export default function App() {
     if(pat.clap[s]>0)playClap(ctx,time,pat.clap[s]);
   },[playBass,playKick,playHat,playClap]);
 
-  const startSeq=useCallback(()=>{
-    const ctx=initAudio();if(ctx.state==="suspended")ctx.resume();
+  const startSeq=useCallback(async ()=>{
+    const ctx=initAudio();
+    if(ctx.state==="suspended"||ctx.state==="interrupted") await ctx.resume();
     stepRef.current=0;activePatternRef.current=selectedPattern;setActivePattern(selectedPattern);
     pendingPatternRef.current=null;pendingPatternsRef.current=null;
     let nextTime=ctx.currentTime+0.05;
@@ -444,6 +445,11 @@ export default function App() {
   useEffect(()=>{const n=nodesRef.current;if(n.delaySend)n.delaySend.gain.value=delayMute?0:delayMix;},[delayMix,delayMute]);
   useEffect(()=>{const n=nodesRef.current;if(n.bassDistortion)n.bassDistortion.curve=createDistortionCurve(driveMute?0:drive*50);},[drive,driveMute]);
   useEffect(()=>()=>{if(timerRef.current)clearTimeout(timerRef.current);if(fadeTimerRef.current)clearInterval(fadeTimerRef.current);},[]);
+  useEffect(()=>{
+    const resume=()=>{ if(ctxRef.current&&ctxRef.current.state!=="running") ctxRef.current.resume(); };
+    document.addEventListener("visibilitychange",resume);
+    return()=>document.removeEventListener("visibilitychange",resume);
+  },[]);
   useEffect(()=>{ localStorage.setItem('born-slippy-theme', theme); },[theme]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
