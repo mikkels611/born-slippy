@@ -127,8 +127,8 @@ function SlotButton({ idx, filled, isActive, slotColor, onTap, onLongPress, btnB
   const handleDown = () => { if(filled) timerRef.current = setTimeout(()=>{onLongPress();timerRef.current="deleted";}, 600); };
   const handleUp = () => { if(timerRef.current==="deleted"){timerRef.current=null;return;} if(timerRef.current)clearTimeout(timerRef.current); timerRef.current=null; onTap(); };
   const handleCancel = () => { if(timerRef.current&&timerRef.current!="deleted")clearTimeout(timerRef.current); };
-  const bg = isActive ? c : filled ? `${c}18` : (isDark ? "#111" : "#f3f3f3");
-  const border = `2px solid ${isActive ? c : filled ? `${c}90` : (isDark ? "#222" : "#bbb")}`;
+  const bg = isActive ? c : filled ? `${c}38` : (isDark ? "#111" : "#f3f3f3");
+  const border = `2px solid ${isActive ? c : filled ? c : (isDark ? "#222" : "#bbb")}`;
   const textColor = isActive ? "#fff" : filled ? c : (isDark ? "#ddd" : "#333");
   return (
     <button onMouseDown={handleDown} onMouseUp={handleUp} onMouseLeave={handleCancel}
@@ -138,7 +138,7 @@ function SlotButton({ idx, filled, isActive, slotColor, onTap, onLongPress, btnB
         border: border,
         color: textColor,
         display:"flex", alignItems:"center", justifyContent:"center",
-        boxShadow: isActive ? `0 0 10px ${c}55` : "none",
+        boxShadow: isActive ? `0 0 10px ${c}88` : filled ? `0 0 6px ${c}44` : "none",
       }}
     >
       {filled ? idx+1 : <span style={{ fontSize:8, opacity:0.5 }}>{idx+1}</span>}
