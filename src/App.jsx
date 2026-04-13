@@ -203,6 +203,8 @@ export default function App() {
   const fadeStepsRef=useRef(16);
   const fadeCurrentStepRef=useRef(0);
   const fadeTimerRef=useRef(null);
+  const playBtnTimerRef=useRef(null);
+  const playingRef=useRef(false);
   const seqModeRef=useRef(false);
   const seqBarsRef=useRef(4);
   const seqCurrentSlotRef=useRef(-1);
@@ -218,6 +220,7 @@ export default function App() {
   useEffect(()=>{ seqModeRef.current=seqPlay; },[seqPlay]);
   useEffect(()=>{ seqBarsRef.current=seqBars; },[seqBars]);
   useEffect(()=>{ seqCurrentSlotRef.current=seqCurrentSlot; },[seqCurrentSlot]);
+  useEffect(()=>{ playingRef.current=playing; },[playing]);
   useEffect(()=>{ savedSlotsRef.current=savedSlots; },[savedSlots]);
 
   useEffect(() => {
@@ -521,6 +524,23 @@ export default function App() {
   const displayPat=patterns[activePattern]||FIXED_PATTERNS[0];
   const getNoteName=()=>{if(noteDown)return"D";if(thirdUp)return"G";return"E";};
 
+  const handlePlayDown=useCallback(()=>{
+    playBtnTimerRef.current=setTimeout(()=>{
+      playBtnTimerRef.current="long";
+      if(playingRef.current){stopSeq(true);}else{seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);}
+    },1500);
+  },[stopSeq]);
+  const handlePlayUp=useCallback(()=>{
+    if(playBtnTimerRef.current==="long"){playBtnTimerRef.current=null;return;}
+    if(playBtnTimerRef.current){clearTimeout(playBtnTimerRef.current);}
+    playBtnTimerRef.current=null;
+    if(playingRef.current){stopSeq(false);}else{startSeq();}
+  },[stopSeq,startSeq]);
+  const handlePlayCancel=useCallback(()=>{
+    if(playBtnTimerRef.current&&playBtnTimerRef.current!=="long")clearTimeout(playBtnTimerRef.current);
+    playBtnTimerRef.current=null;
+  },[]);
+
   const btn={fontFamily:"'Space Mono', monospace",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"all 0.15s",fontWeight:700,textTransform:"uppercase",letterSpacing:1};
 
   return (
@@ -566,22 +586,16 @@ export default function App() {
           boxShadow:noteDown?"0 0 10px rgba(64,160,64,0.2)":"none",
         }}><span style={{fontSize:13}}>↓</span><span>NOTE</span></button>
 
-        {(()=>{
-          const playBtnRef = {t:null};
-          const onDown=()=>{ playBtnRef.t=setTimeout(()=>{ playBtnRef.t="long"; playing?stopSeq(true):(() =>{seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);})(); },1500); };
-          const onUp=()=>{ if(playBtnRef.t==="long"){playBtnRef.t=null;return;} if(playBtnRef.t)clearTimeout(playBtnRef.t); playBtnRef.t=null; playing?stopSeq(false):startSeq(); };
-          const onCancel=()=>{ if(playBtnRef.t&&playBtnRef.t!=="long")clearTimeout(playBtnRef.t); playBtnRef.t=null; };
-          return(<button
-            onMouseDown={onDown} onMouseUp={onUp} onMouseLeave={onCancel}
-            onTouchStart={(e)=>{e.preventDefault();onDown();}} onTouchEnd={(e)=>{e.preventDefault();onUp();}}
-            style={{ ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
-              background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
-              border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#0d0d0d":"#888",
-              boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
-            }}>{playing?"■":"▶"}</button>);
-        })()}
+        <button
+          onMouseDown={handlePlayDown} onMouseUp={handlePlayUp} onMouseLeave={handlePlayCancel}
+          onTouchStart={(e)=>{e.preventDefault();handlePlayDown();}} onTouchEnd={(e)=>{e.preventDefault();handlePlayUp();}}
+          style={{ ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
+            background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
+            border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#0d0d0d":"#888",
+            boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
+          }}>{playing?"■":"▶"}</button>
 
         <button onClick={toggleThirdUp} style={{
           ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
