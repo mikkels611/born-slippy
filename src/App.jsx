@@ -403,6 +403,7 @@ export default function App() {
             const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
             pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
             setTimeout(()=>{
+              if(!playingRef.current) return;
               setSeqCurrentSlot(nextIdx); setActiveSlot(nextIdx);
               if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
             },0);
@@ -420,7 +421,7 @@ export default function App() {
     const ctx=initAudio();
     if(ctx.state==="suspended"||ctx.state==="interrupted") await ctx.resume();
     stepRef.current=0; pendingPatternRef.current=null; pendingPatternsRef.current=null;
-    seqBarCountRef.current=-1;
+    seqBarCountRef.current=0;
     if(seqModeRef.current){
       const slots=savedSlotsRef.current;
       let cur=seqCurrentSlotRef.current;
