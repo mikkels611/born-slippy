@@ -1,0 +1,4 @@
+node_modules/
+dist/assets/
+dist/index.html
+dist/favicon.svg
