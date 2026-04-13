@@ -179,7 +179,7 @@ export default function App() {
   const [midiOutputs, setMidiOutputs] = useState([]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
   const midiChannels = { bass: 1, kick: 2, hats: 3, clap: 4 }; // Default channels 1-4
-  const [fadeMode, setFadeMode] = useState(false);
+  const [fadeMode, setFadeMode] = useState(() => localStorage.getItem('born-slippy-fade') !== 'false');
   const [fadeSteps, setFadeSteps] = useState(16);
 
   const ctxRef=useRef(null); const timerRef=useRef(null); const stepRef=useRef(0);
@@ -451,6 +451,7 @@ export default function App() {
     return()=>document.removeEventListener("visibilitychange",resume);
   },[]);
   useEffect(()=>{ localStorage.setItem('born-slippy-theme', theme); },[theme]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-fade', fadeMode); },[fadeMode]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
   const displayPat=patterns[activePattern]||FIXED_PATTERNS[0];
@@ -556,19 +557,6 @@ export default function App() {
 
       <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
         <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
-          MIDI OUTPUT
-        </div>
-        <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
-          <option value=''>No MIDI Output</option>
-          {midiOutputs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
-          Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
-        </div>
-      </div>
-
-      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
           EXPERIMENTAL: PRESET FADE
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
@@ -582,6 +570,19 @@ export default function App() {
         </div>
         <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
           Fade time: {(fadeSteps * STEP_TIME * 1000).toFixed(0)}ms ({fadeSteps} steps)
+        </div>
+      </div>
+
+      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
+          MIDI OUTPUT
+        </div>
+        <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
+          <option value=''>No MIDI Output</option>
+          {midiOutputs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
+          Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
         </div>
       </div>
     </div>
