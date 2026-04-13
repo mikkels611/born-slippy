@@ -139,6 +139,7 @@ function SlotButton({ idx, filled, isActive, slotColor, onTap, onLongPress, btnB
         color: textColor,
         display:"flex", alignItems:"center", justifyContent:"center",
         boxShadow: isActive ? `0 0 10px ${c}88` : filled ? `0 0 6px ${c}44` : "none",
+        userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
       }}
     >
       {filled ? idx+1 : <span style={{ fontSize:8, opacity:0.5 }}>{idx+1}</span>}
