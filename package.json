@@ -1,5 +1,5 @@
 {
-  "name": "born-slippery-export",
+  "name": "born-slippy-export",
   "private": true,
   "version": "1.0.1",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm version patch --no-git-tag-version && vite build && gh-pages -d dist && git add package.json && git commit -m \"chore: bump version to $(node -p \\\"require('./package.json').version\\\")\" && git push"
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "react": "^19.2.4",
