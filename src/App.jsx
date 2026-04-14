@@ -381,13 +381,14 @@ export default function App() {
   const triggerRandom=useCallback(()=>{
     const pkg=activePackageRef.current;
     const curPat=patternsRef.current[activePatternRef.current];
-    const locks=muteLock?{bass:bassMute,kick:kickMute,hat:hatMute,clap:clapMute}:null;
+    const effectiveMutes={bass:anySolo?!bassSolo:bassMute,kick:anySolo?!kickSolo:kickMute,hat:anySolo?!hatSolo:hatMute,clap:anySolo?!clapSolo:clapMute};
+    const locks=muteLock||anySolo?effectiveMutes:null;
     const rnd=generateRandomPattern(pkg,locks,curPat);setCurrentRandom(rnd);
     const newIdx = (rndColorIdx + 1) % RND_COLORS.length;
     setRndColorIdx(newIdx); setRndColor(RND_COLORS[newIdx]);
     const arr=[...pkg.patterns,rnd];
     setSelectedPattern(4);setIsRandom(true);setActiveSlot(null);loadPats(arr,4);
-  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute]);
+  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute, anySolo, bassSolo, kickSolo, hatSolo, clapSolo]);
 
   const handleSlotTap=useCallback((idx)=>{
     const filled=savedSlots[idx]!==null;
