@@ -548,13 +548,16 @@ export default function App() {
 
   const switchPackage = useCallback((pkg) => {
     if (playing) return;
+    // In admin mode, switching package discards the current draft
+    if (adminMode && draft) {
+      clearDraft();
+      setDraft(null);
+    }
     setActivePackage(pkg);
     activePackageRef.current = pkg;
-    const effectiveBpm = draft ? draft.bpm : pkg.bpm;
-    stepTimeRef.current = getStepTime(effectiveBpm);
-    const pats = draft ? getDraftPatterns(draft) : pkg.patterns;
-    setPatterns(pats);
-    patternsRef.current = pats;
+    stepTimeRef.current = getStepTime(pkg.bpm);
+    setPatterns(pkg.patterns);
+    patternsRef.current = pkg.patterns;
     setActivePattern(0);
     activePatternRef.current = 0;
     setSelectedPattern(0);
@@ -563,9 +566,9 @@ export default function App() {
     setActiveSlot(null);
     localStorage.setItem('born-slippy-package', pkg.id);
     if (nodesRef.current.delay) {
-      nodesRef.current.delay.delayTime.value = getStepTime(effectiveBpm) * 3;
+      nodesRef.current.delay.delayTime.value = getStepTime(pkg.bpm) * 3;
     }
-  }, [playing, draft]);
+  }, [playing, draft, adminMode]);
 
   const displayPat=patterns[activePattern]||effectivePatterns[0];
   const effectiveKey = draft ? draft.key : activePackage.key;
