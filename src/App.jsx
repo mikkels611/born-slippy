@@ -44,6 +44,7 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState(null);
   const [rndColor, setRndColor] = useState("#8020e0");
   const [rndColorIdx, setRndColorIdx] = useState(0);
+  const [muteLock, setMuteLock] = useState(()=>localStorage.getItem('born-slippy-mutelock')==='true');
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('born-slippy-theme');
     if (saved) return saved;
@@ -367,12 +368,14 @@ export default function App() {
 
   const triggerRandom=useCallback(()=>{
     const pkg=activePackageRef.current;
-    const rnd=generateRandomPattern(pkg);setCurrentRandom(rnd);
+    const curPat=patternsRef.current[activePatternRef.current];
+    const locks=muteLock?{bass:bassMute,kick:kickMute,hat:hatMute,clap:clapMute}:null;
+    const rnd=generateRandomPattern(pkg,locks,curPat);setCurrentRandom(rnd);
     const newIdx = (rndColorIdx + 1) % RND_COLORS.length;
     setRndColorIdx(newIdx); setRndColor(RND_COLORS[newIdx]);
     const arr=[...pkg.patterns,rnd];
     setSelectedPattern(4);setIsRandom(true);setActiveSlot(null);loadPats(arr,4);
-  },[loadPats, rndColorIdx]);
+  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute]);
 
   const handleSlotTap=useCallback((idx)=>{
     const filled=savedSlots[idx]!==null;
@@ -491,6 +494,7 @@ export default function App() {
   useEffect(()=>{ localStorage.setItem('born-slippy-fade', fadeMode); },[fadeMode]);
   useEffect(()=>{ localStorage.setItem('born-slippy-seqplay', seqPlay); },[seqPlay]);
   useEffect(()=>{ localStorage.setItem('born-slippy-seqbars', seqBars); },[seqBars]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-mutelock', muteLock); },[muteLock]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
   const switchPackage = useCallback((pkg) => {
@@ -714,6 +718,21 @@ export default function App() {
         </div>
         <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
           {seqPlay ? `Each pattern plays ${seqBars} bar${seqBars>1?"s":""} • TAP pattern to queue next • TAP STOP = pause • HOLD STOP = reset` : "Enable to auto-advance through filled patterns"}
+        </div>
+      </div>
+
+      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
+          EXPERIMENTAL: MUTE LOCK
+        </div>
+        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", marginBottom:6 }}>
+          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+            <input type="checkbox" checked={muteLock} onChange={(e) => setMuteLock(e.target.checked)} style={{ marginRight:4 }} />
+            Lock muted channels on Random
+          </label>
+        </div>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
+          {muteLock ? "Muted channels keep current pattern when generating Random" : "All channels randomised regardless of mute state"}
         </div>
       </div>
 

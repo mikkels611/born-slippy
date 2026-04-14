@@ -48,13 +48,15 @@ function generateBassLine(scalePools) {
   return { bass, accent };
 }
 
-export function generateRandomPattern(themePackage) {
-  const { bass, accent } = generateBassLine(themePackage?.scalePools);
-  const kick=[...KICK_TEMPLATES[Math.floor(Math.random()*KICK_TEMPLATES.length)]];
-  const ohat=[...HAT_TEMPLATES.open[Math.floor(Math.random()*HAT_TEMPLATES.open.length)]];
-  const chat=[...HAT_TEMPLATES.closed[Math.floor(Math.random()*HAT_TEMPLATES.closed.length)]];
-  const clap=[...CLAP_TEMPLATES[Math.floor(Math.random()*CLAP_TEMPLATES.length)]];
-  for(let i=0;i<16;i++){if(kick[i]>0&&kick[i]<1)kick[i]*=0.8+Math.random()*0.4;if(ohat[i]>0)ohat[i]*=0.85+Math.random()*0.3;if(chat[i]>0)chat[i]*=0.85+Math.random()*0.3;}
+export function generateRandomPattern(themePackage, lockedChannels, sourcePat) {
+  const lock = lockedChannels || {};
+  const { bass, accent } = lock.bass && sourcePat ? { bass:[...sourcePat.bass], accent:[...sourcePat.accent] } : generateBassLine(themePackage?.scalePools);
+  const kick = lock.kick && sourcePat ? [...sourcePat.kick] : [...KICK_TEMPLATES[Math.floor(Math.random()*KICK_TEMPLATES.length)]];
+  const ohat = lock.hat && sourcePat ? [...sourcePat.ohat] : [...HAT_TEMPLATES.open[Math.floor(Math.random()*HAT_TEMPLATES.open.length)]];
+  const chat = lock.hat && sourcePat ? [...sourcePat.chat] : [...HAT_TEMPLATES.closed[Math.floor(Math.random()*HAT_TEMPLATES.closed.length)]];
+  const clap = lock.clap && sourcePat ? [...sourcePat.clap] : [...CLAP_TEMPLATES[Math.floor(Math.random()*CLAP_TEMPLATES.length)]];
+  if(!lock.kick) for(let i=0;i<16;i++){if(kick[i]>0&&kick[i]<1)kick[i]*=0.8+Math.random()*0.4;}
+  if(!lock.hat) for(let i=0;i<16;i++){if(ohat[i]>0)ohat[i]*=0.85+Math.random()*0.3;if(chat[i]>0)chat[i]*=0.85+Math.random()*0.3;}
   return { name:"RND", bass, accent, kick, ohat, chat, clap };
 }
 
