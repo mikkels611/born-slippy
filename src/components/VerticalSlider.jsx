@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 
-export default function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020", muted, onMute, isDark=true }) {
+export default function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020", muted, onMute, solo, onSolo, soloActive, isDark=true }) {
   const trackRef = useRef(null);
   const norm = (value-min)/(max-min);
   const dc = muted ? "#444" : color;
@@ -11,9 +11,13 @@ export default function VerticalSlider({ label, value, onChange, min=0, max=1, c
   const trackBg = isDark ? "#161616" : "#e8e8e8";
   const trackBorder = isDark ? "#2a2a2a" : "#b8b8b4";
   const knobBg = isDark ? "linear-gradient(145deg, #222, #1a1a1a)" : "linear-gradient(145deg, #e2e2e2, #c8c8c8)";
+  const muteBlocked = soloActive && !solo;
   const muteBtnBg = muted ? "#e05020" : (isDark ? "#1a1a1a" : "#d9d9d9");
   const muteBtnBorder = muted ? "#e05020" : (isDark ? "#333" : "#b4b4b4");
   const muteBtnColor = muted ? "#0d0d0d" : (isDark ? "#d9d9d9" : "#2a2a2a");
+  const soloBtnBg = solo ? "#e0a020" : (isDark ? "#1a1a1a" : "#d9d9d9");
+  const soloBtnBorder = solo ? "#e0a020" : (isDark ? "#333" : "#b4b4b4");
+  const soloBtnColor = solo ? "#0d0d0d" : (isDark ? "#d9d9d9" : "#2a2a2a");
   const labelColor = muted ? "#666" : (isDark ? "#ccc" : "#555");
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, flex:1, minWidth:0 }}>
@@ -27,7 +31,8 @@ export default function VerticalSlider({ label, value, onChange, min=0, max=1, c
           <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:5, height:5, borderRadius:"50%", background:dc, opacity:0.7 }} />
         </div>
       </div>
-      {onMute && <button onClick={onMute} style={{ width:32, height:20, borderRadius:3, background:muteBtnBg, border:`1px solid ${muteBtnBorder}`, color:muteBtnColor, fontSize:7, fontWeight:700, letterSpacing:0.5, fontFamily:"'Space Mono', monospace", cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.1s", padding:0 }}>{muted?"OFF":"M"}</button>}
+      {onMute && <button onClick={muteBlocked?undefined:onMute} style={{ width:32, height:20, borderRadius:3, background:muteBtnBg, border:`1px solid ${muteBtnBorder}`, color:muteBtnColor, fontSize:7, fontWeight:700, letterSpacing:0.5, fontFamily:"'Space Mono', monospace", cursor:muteBlocked?"default":"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.1s", padding:0, opacity:muteBlocked?0.25:1 }}>{muted?"OFF":"M"}</button>}
+      {onSolo && <button onClick={onSolo} style={{ width:32, height:20, borderRadius:3, background:soloBtnBg, border:`1px solid ${soloBtnBorder}`, color:soloBtnColor, fontSize:7, fontWeight:700, letterSpacing:0.5, fontFamily:"'Space Mono', monospace", cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.1s", padding:0 }}>S</button>}
     </div>
   );
 }
