@@ -4,18 +4,35 @@ import { generateRandomPattern } from "./data/patterns";
 import { THEME_PACKAGES, BORN_SLIPPY, getPackageById } from "./data/themePackages";
 import { persistSlots, loadSlotsAsync, exportSession, importSession } from "./data/sessionStore";
 import { createDistortionCurve } from "./audio/utils";
+import { loadDraft, createDraft, saveDraft, clearDraft, captureToDraft, updatePatternMeta, updateDraftMeta, updatePatternColor, addSet, deleteSet, switchSet, getDraftPatterns, getDraftColors, exportDraftAsJson, importDraftFromJson } from "./data/draftPackageStore";
 import VerticalSlider from "./components/VerticalSlider";
 import SlotButton from "./components/SlotButton";
 
 export default function App() {
+  // Admin mode detection
+  const adminMode = useMemo(() => {
+    const params = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+    return params.get('admin') === 'true';
+  }, []);
+  const [draft, setDraft] = useState(() => adminMode ? loadDraft() : null);
+  const [editingPatternName, setEditingPatternName] = useState(null);
+  const [adminMetaOpen, setAdminMetaOpen] = useState(false);
+  const draftImportRef = useRef(null);
+  const [captureFlash, setCaptureFlash] = useState(null);
+
   const [activePackage, setActivePackage] = useState(() => {
     const saved = localStorage.getItem('born-slippy-package');
     return saved ? (getPackageById(saved) || BORN_SLIPPY) : BORN_SLIPPY;
   });
-  const bpm = activePackage.bpm;
+  const bpm = draft ? draft.bpm : activePackage.bpm;
   const stepTime = useMemo(() => getStepTime(bpm), [bpm]);
   const stepTimeRef = useRef(stepTime);
   const activePackageRef = useRef(activePackage);
+  // Draft-aware patterns and colors for the current set
+  const draftPatterns = draft ? getDraftPatterns(draft) : null;
+  const draftColors = draft ? getDraftColors(draft) : null;
+  const effectivePatterns = draftPatterns || activePackage.patterns;
+  const effectiveColors = draftColors || activePackage.patternColors;
 
   const [playing, setPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
@@ -28,7 +45,10 @@ export default function App() {
   const [drive, setDrive] = useState(0.3);
   const [selectedPattern, setSelectedPattern] = useState(0);
   const [activePattern, setActivePattern] = useState(0);
-  const [patterns, setPatterns] = useState(activePackage.patterns);
+  const [patterns, setPatterns] = useState(() => {
+    if (adminMode) { const d = loadDraft(); if (d) return getDraftPatterns(d); }
+    return activePackage.patterns;
+  });
   const [isRandom, setIsRandom] = useState(false);
   const [currentRandom, setCurrentRandom] = useState(null);
   const [noteDown, setNoteDown] = useState(false);
@@ -74,7 +94,9 @@ export default function App() {
   const ctxRef=useRef(null); const timerRef=useRef(null); const stepRef=useRef(0);
   const nodesRef=useRef({}); const activePatternRef=useRef(0);
   const pendingPatternRef=useRef(null); const pendingPatternsRef=useRef(null);
-  const patternsRef=useRef(activePackage.patterns);
+  const patternsRef=useRef(effectivePatterns);
+  const draftRef=useRef(draft);
+  useEffect(()=>{ draftRef.current=draft; },[draft]);
   const pitchRef=useRef({ noteDown:false, thirdUp:false });
   const mutesRef=useRef({ bass:false, kick:false, hat:false, clap:false });
   const clapVolRef=useRef(0.5);
@@ -308,7 +330,7 @@ export default function App() {
           if(nextIdx!==null){
             seqCurrentSlotRef.current=nextIdx;
             const slot=slots[nextIdx];
-            const pkgPats=activePackageRef.current.patterns;
+            const pkgPats=draftRef.current?getDraftPatterns(draftRef.current):activePackageRef.current.patterns;
             const arr=slot.fixedIndex>=0?pkgPats:[...pkgPats,slot];
             const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
             pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
@@ -340,7 +362,7 @@ export default function App() {
         const slot=slots[cur];
         seqCurrentSlotRef.current=cur; setSeqCurrentSlot(cur); setActiveSlot(cur);
         restoreSnapshotRef.current&&restoreSnapshotRef.current(slot.channels);
-        const pkgPats2=activePackageRef.current.patterns;
+        const pkgPats2=draftRef.current?getDraftPatterns(draftRef.current):activePackageRef.current.patterns;
         const arr=slot.fixedIndex>=0?pkgPats2:[...pkgPats2,slot];
         const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
         patternsRef.current=arr; setPatterns(arr); activePatternRef.current=patIdx; setActivePattern(patIdx);
@@ -369,7 +391,8 @@ export default function App() {
 
   const selectFixed=useCallback((idx)=>{
     setSelectedPattern(idx);setIsRandom(false);setActiveSlot(null);
-    const pat=activePackageRef.current.patterns[idx];
+    const pats=draft?getDraftPatterns(draft):activePackageRef.current.patterns;
+    const pat=pats[idx];
     if(pat?.channels){
       const c=pat.channels;
       if(c.bassVol!==undefined) setBassVol(c.bassVol);
@@ -380,8 +403,8 @@ export default function App() {
       if(c.delayMix!==undefined) setDelayMix(c.delayMix);
       if(c.drive!==undefined) setDrive(c.drive);
     }
-    loadPats(activePackageRef.current.patterns,idx);
-  },[loadPats]);
+    loadPats(pats,idx);
+  },[loadPats,draft]);
 
   const triggerRandom=useCallback(()=>{
     const pkg=activePackageRef.current;
@@ -395,9 +418,10 @@ export default function App() {
     const rnd=generateRandomPattern(pkg,locks,curPat);setCurrentRandom(rnd);
     const newIdx = (rndColorIdx + 1) % RND_COLORS.length;
     setRndColorIdx(newIdx); setRndColor(RND_COLORS[newIdx]);
-    const arr=[...pkg.patterns,rnd];
+    const basePats=draft?getDraftPatterns(draft):pkg.patterns;
+    const arr=[...basePats,rnd];
     setSelectedPattern(4);setIsRandom(true);setActiveSlot(null);loadPats(arr,4);
-  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute, anySolo, bassSolo, kickSolo, hatSolo, clapSolo, anyRec, bassRec, kickRec, hatRec, clapRec]);
+  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute, anySolo, bassSolo, kickSolo, hatSolo, clapSolo, anyRec, bassRec, kickRec, hatRec, clapRec, draft]);
 
   const handleSlotTap=useCallback((idx)=>{
     const filled=savedSlots[idx]!==null;
@@ -416,12 +440,13 @@ export default function App() {
       }
       const slot=savedSlots[idx];
       setActiveSlot(idx);
+      const basePats=draft?getDraftPatterns(draft):activePackage.patterns;
       if (slot.fixedIndex >= 0) {
         setSelectedPattern(slot.fixedIndex);setIsRandom(false);setCurrentRandom(null);
         if (fadeMode && activeSlot !== idx) { startFade(slot.channels); } else { restoreChannelSnapshot(slot.channels); }
-        loadPats(activePackage.patterns, slot.fixedIndex);
+        loadPats(basePats, slot.fixedIndex);
       } else {
-        const arr=[...activePackage.patterns,slot];
+        const arr=[...basePats,slot];
         setSelectedPattern(4);setIsRandom(true);setCurrentRandom(slot);
         if(slot.color) setRndColor(slot.color);
         if (fadeMode && activeSlot !== idx) { startFade(slot.channels); } else { restoreChannelSnapshot(slot.channels); }
@@ -429,9 +454,11 @@ export default function App() {
       }
     } else {
       let pat, color, fixedIndex = -1;
+      const basePats=draft?getDraftPatterns(draft):activePackage.patterns;
+      const baseColors=draft?getDraftColors(draft):activePackage.patternColors;
       if (!isRandom && activePattern < 4) {
-        pat = activePackage.patterns[activePattern];
-        color = activePackage.patternColors[activePattern];
+        pat = basePats[activePattern];
+        color = baseColors[activePattern];
         fixedIndex = activePattern;
       } else if (currentRandom) {
         pat = currentRandom;
@@ -443,7 +470,7 @@ export default function App() {
       newSlots[idx] = { ...pat, name:`S${idx+1}`, color, channels: getChannelSnapshot(), fixedIndex };
       setSavedSlots(newSlots);setActiveSlot(idx);persistSlots(newSlots);
     }
-  },[savedSlots,currentRandom,patterns,activePattern,isRandom,loadPats,rndColor,getChannelSnapshot,restoreChannelSnapshot,fadeMode,startFade,activeSlot,activePackage]);
+  },[savedSlots,currentRandom,patterns,activePattern,isRandom,loadPats,rndColor,getChannelSnapshot,restoreChannelSnapshot,fadeMode,startFade,activeSlot,activePackage,draft]);
 
   const handleSlotDelete=useCallback((idx)=>{
     const newSlots=[...savedSlots];newSlots[idx]=null;
@@ -523,9 +550,11 @@ export default function App() {
     if (playing) return;
     setActivePackage(pkg);
     activePackageRef.current = pkg;
-    stepTimeRef.current = getStepTime(pkg.bpm);
-    setPatterns(pkg.patterns);
-    patternsRef.current = pkg.patterns;
+    const effectiveBpm = draft ? draft.bpm : pkg.bpm;
+    stepTimeRef.current = getStepTime(effectiveBpm);
+    const pats = draft ? getDraftPatterns(draft) : pkg.patterns;
+    setPatterns(pats);
+    patternsRef.current = pats;
     setActivePattern(0);
     activePatternRef.current = 0;
     setSelectedPattern(0);
@@ -534,13 +563,14 @@ export default function App() {
     setActiveSlot(null);
     localStorage.setItem('born-slippy-package', pkg.id);
     if (nodesRef.current.delay) {
-      nodesRef.current.delay.delayTime.value = getStepTime(pkg.bpm) * 3;
+      nodesRef.current.delay.delayTime.value = getStepTime(effectiveBpm) * 3;
     }
-  }, [playing]);
+  }, [playing, draft]);
 
-  const displayPat=patterns[activePattern]||activePackage.patterns[0];
+  const displayPat=patterns[activePattern]||effectivePatterns[0];
+  const effectiveKey = draft ? draft.key : activePackage.key;
   const getNoteName=()=>{
-    const keyBase=activePackage.key.replace("m","");
+    const keyBase=effectiveKey.replace("m","");
     if(noteDown){
       const semitoneDown={"E":"D","A":"G","C":"Bb","D":"C","F":"Eb","G":"F","B":"A"};
       return semitoneDown[keyBase]||keyBase;
@@ -551,6 +581,73 @@ export default function App() {
     }
     return keyBase;
   };
+
+  // Admin: capture current pattern into draft slot
+  const handleCapture = useCallback((patIdx) => {
+    if (!draft) return;
+    const curPat = patternsRef.current[activePatternRef.current];
+    if (!curPat) return;
+    const snap = getChannelSnapshot();
+    const setIdx = draft._activeSet || 0;
+    const newDraft = captureToDraft(draft, setIdx, patIdx, curPat, snap);
+    setDraft(newDraft);
+    // Reload patterns from draft
+    const pats = getDraftPatterns(newDraft);
+    setPatterns(pats); patternsRef.current = pats;
+    setCaptureFlash(patIdx);
+    setTimeout(() => setCaptureFlash(null), 600);
+  }, [draft, getChannelSnapshot]);
+
+  // Admin: start editing a new draft from the active package
+  const handleNewDraft = useCallback(() => {
+    const d = createDraft(activePackage);
+    setDraft(d);
+    const pats = getDraftPatterns(d);
+    setPatterns(pats); patternsRef.current = pats;
+    setActivePattern(0); activePatternRef.current = 0;
+    setSelectedPattern(0); setIsRandom(false);
+  }, [activePackage]);
+
+  // Admin: clear current draft
+  const handleClearDraft = useCallback(() => {
+    if (!confirm('Discard current draft?')) return;
+    clearDraft();
+    setDraft(null);
+    setPatterns(activePackage.patterns); patternsRef.current = activePackage.patterns;
+    setActivePattern(0); activePatternRef.current = 0;
+    setSelectedPattern(0); setIsRandom(false);
+  }, [activePackage]);
+
+  // Admin: switch set
+  const handleSwitchSet = useCallback((setIdx) => {
+    if (!draft || playing) return;
+    const newDraft = switchSet(draft, setIdx);
+    setDraft(newDraft);
+    const pats = getDraftPatterns(newDraft);
+    setPatterns(pats); patternsRef.current = pats;
+    setActivePattern(0); activePatternRef.current = 0;
+    setSelectedPattern(0); setIsRandom(false);
+  }, [draft, playing]);
+
+  // Admin: add new set
+  const handleAddSet = useCallback(() => {
+    if (!draft) return;
+    const newDraft = addSet(draft);
+    setDraft(newDraft);
+  }, [draft]);
+
+  // Admin: delete current set
+  const handleDeleteSet = useCallback(() => {
+    if (!draft || draft.sets.length <= 1) return;
+    if (!confirm('Delete this set?')) return;
+    const setIdx = draft._activeSet || 0;
+    const newDraft = deleteSet(draft, setIdx);
+    setDraft(newDraft);
+    const pats = getDraftPatterns(newDraft);
+    setPatterns(pats); patternsRef.current = pats;
+    setActivePattern(0); activePatternRef.current = 0;
+    setSelectedPattern(0); setIsRandom(false);
+  }, [draft]);
 
   const handlePlayDown=useCallback(()=>{
     playBtnTimerRef.current=setTimeout(()=>{
@@ -574,9 +671,33 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:theme === 'dark' ? '#0d0d0d' : '#f6f7f9', fontFamily:"'Space Mono', monospace", color:theme === 'dark' ? '#fff' : '#111', display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 10px 24px", gap:12, backgroundImage:theme === 'dark' ? "radial-gradient(circle at 50% 15%, rgba(224,80,32,0.04) 0%, transparent 60%)" : "radial-gradient(circle at 50% 15%, rgba(224,80,32,0.08) 0%, transparent 60%)", WebkitTapHighlightColor:"transparent", userSelect:"none" }}>
       <div style={{ textAlign:"center" }}>
-        <h1 style={{ fontSize:14, letterSpacing:7, color:activePackage.patternColors[0], margin:0, fontWeight:700 }}>BORN SLIPPY</h1>
+        <h1 style={{ fontSize:14, letterSpacing:7, color:effectiveColors[0], margin:0, fontWeight:700 }}>BORN SLIPPY</h1>
         <div style={{ fontSize:10, color:theme === 'dark' ? '#555' : '#666', letterSpacing:3, marginTop:3 }}>{bpm} BPM • {getNoteName()} MINOR</div>
       </div>
+
+      {/* ADMIN BAR */}
+      {adminMode && (
+        <div style={{ width:"100%", maxWidth:380, background:"rgba(208,32,32,0.08)", borderRadius:10, border:"1px solid #d0202044", padding:"8px 10px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+            <span style={{ fontSize:9, color:"#d02020", letterSpacing:2, fontWeight:700 }}>ADMIN MODE</span>
+            {draft ? (
+              <div style={{ display:"flex", gap:4 }}>
+                <button onClick={()=>exportDraftAsJson(draft)} style={{ ...btn, fontSize:7, padding:"3px 8px", borderRadius:4, background:"#1a2a1a", border:"1px solid #40a040", color:"#40a040" }}>EXPORT</button>
+                <button onClick={()=>draftImportRef.current?.click()} style={{ ...btn, fontSize:7, padding:"3px 8px", borderRadius:4, background:theme==='dark'?"#1a1a2a":"#e0e0f0", border:"1px solid #4060d0", color:"#4060d0" }}>IMPORT</button>
+                <button onClick={handleClearDraft} style={{ ...btn, fontSize:7, padding:"3px 8px", borderRadius:4, background:"#2a1a1a", border:"1px solid #d04040", color:"#d04040" }}>DISCARD</button>
+                <input ref={draftImportRef} type="file" accept=".json" onChange={async(e)=>{const f=e.target.files[0];if(!f)return;try{const d=await importDraftFromJson(f);setDraft(d);const pats=getDraftPatterns(d);setPatterns(pats);patternsRef.current=pats;setActivePattern(0);activePatternRef.current=0;setSelectedPattern(0);}catch(err){alert('Import failed: '+err.message);}e.target.value='';}} style={{ display:"none" }} />
+              </div>
+            ) : (
+              <button onClick={handleNewDraft} style={{ ...btn, fontSize:7, padding:"3px 8px", borderRadius:4, background:"#1a2a1a", border:"1px solid #40a040", color:"#40a040" }}>NEW DRAFT FROM "{activePackage.name}"</button>
+            )}
+          </div>
+          {draft && (
+            <div style={{ fontSize:8, color:theme==='dark'?"#888":"#555", textAlign:"center" }}>
+              Draft: {draft.name} • {draft.sets.length} set{draft.sets.length>1?"s":""} • base: {draft._baseId}
+            </div>
+          )}
+        </div>
+      )}
 
       <select
         value={activePackage.id}
@@ -586,8 +707,8 @@ export default function App() {
           ...btn, width:"100%", maxWidth:380, padding:"10px 12px", borderRadius:7,
           fontSize:10, letterSpacing:2, textAlign:"center", appearance:"none", WebkitAppearance:"none",
           background:theme === 'dark' ? "#161616" : "#dedede",
-          border:`2px solid ${activePackage.patternColors[0]}`,
-          color:activePackage.patternColors[0],
+          border:`2px solid ${effectiveColors[0]}`,
+          color:effectiveColors[0],
           opacity:playing?0.4:1,
           backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpath d='M0 0l6 6 6-6' fill='${encodeURIComponent(theme === 'dark' ? '#666' : '#888')}' /%3E%3C/svg%3E")`,
           backgroundRepeat:"no-repeat", backgroundPosition:"right 12px center",
@@ -601,11 +722,47 @@ export default function App() {
         ))}
       </select>
 
+      {/* ADMIN: Set switcher tabs */}
+      {adminMode && draft && draft.sets.length > 0 && (
+        <div style={{ display:"flex", gap:4, width:"100%", maxWidth:380, alignItems:"center" }}>
+          {draft.sets.map((set,si)=>{
+            const isActive = si === (draft._activeSet||0);
+            return(<button key={si} onClick={()=>handleSwitchSet(si)} style={{ ...btn, flex:1, padding:"6px 2px", borderRadius:6, fontSize:8, letterSpacing:1, background:isActive?"#d02020":(theme==='dark'?"#161616":"#dedede"), border:`1px solid ${isActive?"#d02020":(theme==='dark'?"#333":"#bbb")}`, color:isActive?"#fff":(theme==='dark'?"#888":"#444") }}>{set.name}</button>);
+          })}
+          <button onClick={handleAddSet} style={{ ...btn, width:28, padding:"6px 0", borderRadius:6, fontSize:10, background:theme==='dark'?"#161616":"#dedede", border:`1px solid ${theme==='dark'?"#333":"#bbb"}`, color:theme==='dark'?"#888":"#444" }}>+</button>
+          {draft.sets.length>1&&<button onClick={handleDeleteSet} style={{ ...btn, width:28, padding:"6px 0", borderRadius:6, fontSize:10, background:"#2a1a1a", border:"1px solid #d04040", color:"#d04040" }}>−</button>}
+        </div>
+      )}
+
+      {/* ADMIN: Capture row */}
+      {adminMode && draft && (
+        <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
+          {[0,1,2,3].map(idx=>(
+            <button key={idx} onClick={()=>handleCapture(idx)} style={{ ...btn, flex:1, padding:"6px 2px", borderRadius:6, fontSize:8, letterSpacing:1, background:captureFlash===idx?"#40a040":(theme==='dark'?"#0d1a0d":"#e0f0e0"), border:`1px solid ${captureFlash===idx?"#40a040":"#40a04066"}`, color:captureFlash===idx?"#fff":"#40a040", transition:"all 0.15s" }}>
+              {captureFlash===idx?"✓":`⬇P${idx+1}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
-        {activePackage.patterns.map((pat,idx)=>{
-          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=activePackage.patternColors[idx];
+        {effectivePatterns.map((pat,idx)=>{
+          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=effectiveColors[idx];
           return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"9px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, background:isA?pc:isQ?(theme === 'dark' ? `${pc}22` : `${pc}18`):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?`2px solid ${pc}`:isA?`2px solid ${pc}`:`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#fff":isQ?pc:(theme === 'dark' ? "#666" : "#222") }}>
-            {pat.name}{isQ&&<div style={{fontSize:6,marginTop:1,opacity:0.8}}>NEXT</div>}
+            {adminMode && draft && editingPatternName===idx ? (
+              <input
+                autoFocus
+                defaultValue={pat.name}
+                onClick={(e)=>e.stopPropagation()}
+                onBlur={(e)=>{const newDraft=updatePatternMeta(draft,draft._activeSet||0,idx,e.target.value.toUpperCase());setDraft(newDraft);setEditingPatternName(null);}}
+                onKeyDown={(e)=>{if(e.key==='Enter')e.target.blur();}}
+                style={{ width:"100%", background:"transparent", border:"none", color:"inherit", fontSize:9, fontWeight:700, letterSpacing:1.5, textAlign:"center", fontFamily:"'Space Mono',monospace", textTransform:"uppercase", outline:"none", padding:0 }}
+              />
+            ) : (
+              <span onDoubleClick={adminMode&&draft?(e)=>{e.stopPropagation();setEditingPatternName(idx);}:undefined}>
+                {pat.name}{isQ&&<div style={{fontSize:6,marginTop:1,opacity:0.8}}>NEXT</div>}
+              </span>
+            )}
           </button>);
         })}
       </div>
@@ -770,6 +927,49 @@ export default function App() {
           Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
         </div>
       </div>
+
+      {/* ADMIN: Metadata editor */}
+      {adminMode && draft && (
+        <div style={{ width:"100%", maxWidth:380, background:"rgba(208,32,32,0.05)", borderRadius:10, border:"1px solid #d0202033", padding:"10px 8px 8px" }}>
+          <button onClick={()=>setAdminMetaOpen(v=>!v)} style={{ ...btn, width:"100%", fontSize:8, letterSpacing:2, color:"#d02020", background:"transparent", border:"none", padding:"2px 0", cursor:"pointer" }}>
+            {adminMetaOpen?"▼":"▶"} PACKAGE METADATA
+          </button>
+          {adminMetaOpen && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:8 }}>
+              {[
+                { label:"ID", field:"id", val:draft.id },
+                { label:"Name", field:"name", val:draft.name },
+                { label:"Artist", field:"artist", val:draft.artist },
+                { label:"Description", field:"description", val:draft.description },
+                { label:"Key", field:"key", val:draft.key },
+                { label:"BPM", field:"bpm", val:draft.bpm, type:"number" },
+              ].map(({label,field,val,type})=>(
+                <label key={field} style={{ display:"flex", alignItems:"center", gap:6, fontSize:9, color:theme==='dark'?"#ccc":"#333" }}>
+                  <span style={{ width:70, textAlign:"right", letterSpacing:1, fontSize:8 }}>{label}:</span>
+                  <input
+                    type={type||"text"} defaultValue={val}
+                    onBlur={(e)=>{const v=type==="number"?parseFloat(e.target.value):e.target.value;setDraft(updateDraftMeta(draft,{[field]:v}));}}
+                    style={{ flex:1, background:theme==='dark'?"#1a1a1a":"#fff", border:`1px solid ${theme==='dark'?"#333":"#ccc"}`, color:theme==='dark'?"#ccc":"#000", fontSize:9, padding:"3px 6px", borderRadius:4, fontFamily:"'Space Mono',monospace" }}
+                  />
+                </label>
+              ))}
+              <div style={{ fontSize:8, color:theme==='dark'?"#666":"#888", textAlign:"center", marginTop:4 }}>
+                Set name: <input
+                  defaultValue={draft.sets[draft._activeSet||0]?.name||""}
+                  onBlur={(e)=>{const d={...draft};d.sets[d._activeSet||0].name=e.target.value;saveDraft(d);setDraft({...d});}}
+                  style={{ width:100, background:theme==='dark'?"#1a1a1a":"#fff", border:`1px solid ${theme==='dark'?"#333":"#ccc"}`, color:theme==='dark'?"#ccc":"#000", fontSize:8, padding:"2px 4px", borderRadius:3, fontFamily:"'Space Mono',monospace" }}
+                />
+              </div>
+              <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                <span style={{ fontSize:8, color:theme==='dark'?"#888":"#555", letterSpacing:1 }}>Colors:</span>
+                {effectiveColors.map((c,i)=>(
+                  <input key={i} type="color" value={c} onChange={(e)=>{setDraft(updatePatternColor(draft,draft._activeSet||0,i,e.target.value));}} style={{ width:28, height:20, border:"none", cursor:"pointer", padding:0, background:"transparent" }} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ fontSize:8, color:theme === 'dark' ? "#333" : "#aaa", textAlign:"center", paddingBottom:8 }}>
         v{__APP_VERSION__}
