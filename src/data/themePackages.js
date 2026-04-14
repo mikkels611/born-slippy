@@ -158,9 +158,75 @@ export const DARK_AND_LONG = {
 };
 
 // ---------------------------------------------------------------------------
+// Dark & Long Sub — Underworld  |  135 BPM  |  A minor (one octave lower)
+// ---------------------------------------------------------------------------
+export const DARK_AND_LONG_SUB = {
+  id: "dark-and-long-sub",
+  formatVersion: PACKAGE_FORMAT_VERSION,
+  name: "Dark & Long Sub",
+  artist: "Underworld",
+  description: "Dark & Long dropped one octave — sub-bass weight for comparison",
+  bpm: 135,
+  key: "Am",
+
+  patterns: [
+    {
+      name: "PULSE",
+      description: "A1 sub-bass groove — one octave below the original PULSE",
+      bass:   [55,55,41.20,55,55,49,55,41.20,55,55,65.41,55,49,41.20,55,36.71],
+      accent: [1,0.4,0.7,0.3,0.9,0.5,0.6,0.4,1,0.3,0.8,0.4,0.7,0.5,0.9,0.3],
+      kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0.15],
+      ohat:   [0,0,0.5,0,0,0,0.6,0,0,0,0.5,0,0,0,0.6,0],
+      chat:   [0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15],
+      clap:   [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    },
+    {
+      name: "DUB",
+      description: "Sparse notes with rests — designed for delay effects to fill the space",
+      bass:   [110,0,0,82.41,0,0,98,0,110,0,0,0,82.41,0,0,0],
+      accent: [1,0,0,0.6,0,0,0.7,0,0.9,0,0,0,0.5,0,0,0],
+      kick:   [1,0,0,0,1,0,0,0.15,1,0,0,0,0,0,0,0],
+      ohat:   [0,0,0,0,0,0,0.5,0,0,0,0,0,0,0,0.6,0],
+      chat:   [0,0,0.15,0,0,0,0,0.1,0,0,0.15,0,0,0,0,0.1],
+      clap:   [0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    },
+    {
+      name: "RISE",
+      description: "Ascending phrases reaching C3 — busier kicks with ghost notes, building energy",
+      bass:   [110,110,130.81,110,82.41,98,110,130.81,110,98,110,130.81,82.41,98,110,110],
+      accent: [1,0.5,0.8,0.4,0.7,0.6,0.9,0.7,1,0.4,0.8,0.7,0.6,0.5,1,0.3],
+      kick:   [1,0,0,0.2,1,0,0.3,0,1,0,0,0.2,1,0,0.3,0],
+      ohat:   [0,0,0.6,0,0,0,0,0.5,0,0,0.6,0,0,0,0,0.5],
+      chat:   [0.3,0.2,0,0.2,0.3,0.15,0.2,0,0.3,0.2,0,0.2,0.3,0.15,0.25,0],
+      clap:   [0,0,0,0,1,0,0,0.2,0,0,0,0,1,0,0,0.3],
+    },
+    {
+      name: "DEEP",
+      description: "Hypnotic A2 drone with subtle G2/E2 descent — minimal drums, maximum atmosphere",
+      bass:   [110,110,110,110,110,110,110,110,98,98,82.41,82.41,110,110,110,110],
+      accent: [1,0.2,0.3,0.15,0.8,0.2,0.25,0.15,0.9,0.2,0.3,0.15,1,0.2,0.25,0.15],
+      kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+      ohat:   [0,0,0,0,0,0,0.4,0,0,0,0,0,0,0,0.4,0],
+      chat:   [0.15,0,0.1,0,0.15,0,0,0,0.15,0,0.1,0,0.15,0,0,0.1],
+      clap:   [0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    },
+  ],
+
+  patternColors: ["#2040a0", "#20a0a0", "#c09020", "#8020a0"],
+
+  scalePools: [
+    [55, 49, 41.20, 65.41, 36.71],
+    [55, 32.70, 36.71, 41.20, 43.65, 49, 65.41],
+    [55, 65.41, 41.20, 49],
+    [55, 41.20, 65.41, 36.71],
+    [55, 43.65, 49, 32.70, 36.71],
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
-export const THEME_PACKAGES = [BORN_SLIPPY, DARK_AND_LONG];
+export const THEME_PACKAGES = [BORN_SLIPPY, DARK_AND_LONG, DARK_AND_LONG_SUB];
 
 export function getPackageById(id) {
   return THEME_PACKAGES.find(p => p.id === id) || BORN_SLIPPY;
