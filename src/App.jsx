@@ -517,14 +517,28 @@ export default function App() {
         <div style={{ fontSize:10, color:theme === 'dark' ? '#555' : '#666', letterSpacing:3, marginTop:3 }}>{bpm} BPM • {getNoteName()} MINOR</div>
       </div>
 
-      <div style={{ display:"flex", gap:4, width:"100%", maxWidth:380 }}>
-        {THEME_PACKAGES.map((pkg)=>{
-          const isAct=pkg.id===activePackage.id;
-          return(<button key={pkg.id} onClick={()=>switchPackage(pkg)} disabled={playing} style={{ ...btn, flex:1, padding:"7px 2px", borderRadius:6, fontSize:8, letterSpacing:1, background:isAct?(theme === 'dark' ? "#1a1a1a" : "#d0d0d0"):(theme === 'dark' ? "#111" : "#e8e8e8"), border:`2px solid ${isAct?pkg.patternColors[0]:(theme === 'dark' ? "#222" : "#ccc")}`, color:isAct?pkg.patternColors[0]:(theme === 'dark' ? "#555" : "#999"), opacity:playing&&!isAct?0.4:1 }}>
-            {pkg.name}<br/><span style={{fontSize:7,opacity:0.7}}>{pkg.bpm} BPM • {pkg.key}</span>
-          </button>);
-        })}
-      </div>
+      <select
+        value={activePackage.id}
+        onChange={(e) => { const pkg = getPackageById(e.target.value); if (pkg) switchPackage(pkg); }}
+        disabled={playing}
+        style={{
+          ...btn, width:"100%", maxWidth:380, padding:"10px 12px", borderRadius:7,
+          fontSize:10, letterSpacing:2, textAlign:"center", appearance:"none", WebkitAppearance:"none",
+          background:theme === 'dark' ? "#161616" : "#dedede",
+          border:`2px solid ${activePackage.patternColors[0]}`,
+          color:activePackage.patternColors[0],
+          opacity:playing?0.4:1,
+          backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpath d='M0 0l6 6 6-6' fill='${encodeURIComponent(theme === 'dark' ? '#666' : '#888')}' /%3E%3C/svg%3E")`,
+          backgroundRepeat:"no-repeat", backgroundPosition:"right 12px center",
+          paddingRight:32,
+        }}
+      >
+        {THEME_PACKAGES.map((pkg) => (
+          <option key={pkg.id} value={pkg.id}>
+            {pkg.name} — {pkg.bpm} BPM • {pkg.key}
+          </option>
+        ))}
+      </select>
 
       <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
         {activePackage.patterns.map((pat,idx)=>{
