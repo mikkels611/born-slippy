@@ -45,6 +45,11 @@ export default function App() {
   const [hatSolo, setHatSolo] = useState(false);
   const [clapSolo, setClapSolo] = useState(false);
   const anySolo = bassSolo || kickSolo || hatSolo || clapSolo;
+  const [bassRec, setBassRec] = useState(false);
+  const [kickRec, setKickRec] = useState(false);
+  const [hatRec, setHatRec] = useState(false);
+  const [clapRec, setClapRec] = useState(false);
+  const anyRec = bassRec || kickRec || hatRec || clapRec;
   const [savedSlots, setSavedSlots] = useState(Array(24).fill(null));
   const [activeSlot, setActiveSlot] = useState(null);
   const [rndColor, setRndColor] = useState("#8020e0");
@@ -381,14 +386,18 @@ export default function App() {
   const triggerRandom=useCallback(()=>{
     const pkg=activePackageRef.current;
     const curPat=patternsRef.current[activePatternRef.current];
-    const effectiveMutes={bass:anySolo?!bassSolo:bassMute,kick:anySolo?!kickSolo:kickMute,hat:anySolo?!hatSolo:hatMute,clap:anySolo?!clapSolo:clapMute};
-    const locks=muteLock||anySolo?effectiveMutes:null;
+    let locks=null;
+    if(anyRec){
+      locks={bass:!bassRec,kick:!kickRec,hat:!hatRec,clap:!clapRec};
+    }else if(muteLock||anySolo){
+      locks={bass:anySolo?!bassSolo:bassMute,kick:anySolo?!kickSolo:kickMute,hat:anySolo?!hatSolo:hatMute,clap:anySolo?!clapSolo:clapMute};
+    }
     const rnd=generateRandomPattern(pkg,locks,curPat);setCurrentRandom(rnd);
     const newIdx = (rndColorIdx + 1) % RND_COLORS.length;
     setRndColorIdx(newIdx); setRndColor(RND_COLORS[newIdx]);
     const arr=[...pkg.patterns,rnd];
     setSelectedPattern(4);setIsRandom(true);setActiveSlot(null);loadPats(arr,4);
-  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute, anySolo, bassSolo, kickSolo, hatSolo, clapSolo]);
+  },[loadPats, rndColorIdx, muteLock, bassMute, kickMute, hatMute, clapMute, anySolo, bassSolo, kickSolo, hatSolo, clapSolo, anyRec, bassRec, kickRec, hatRec, clapRec]);
 
   const handleSlotTap=useCallback((idx)=>{
     const filled=savedSlots[idx]!==null;
@@ -658,10 +667,10 @@ export default function App() {
       </div>
 
       <div style={{ display:"flex", gap:2, padding:"10px 6px 6px", background:theme === 'dark' ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.06)", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, width:"100%", maxWidth:380, justifyContent:"space-around" }}>
-        <VerticalSlider label="Bass" value={bassVol} onChange={setBassVol} muted={anySolo?!bassSolo:bassMute} onMute={()=>setBassMute(v=>!v)} solo={bassSolo} onSolo={()=>setBassSolo(v=>!v)} soloActive={anySolo} isDark={theme === 'dark'} />
-        <VerticalSlider label="Kick" value={kickVol} onChange={setKickVol} muted={anySolo?!kickSolo:kickMute} onMute={()=>setKickMute(v=>!v)} solo={kickSolo} onSolo={()=>setKickSolo(v=>!v)} soloActive={anySolo} isDark={theme === 'dark'} />
-        <VerticalSlider label="Hats" value={hatVol} onChange={setHatVol} muted={anySolo?!hatSolo:hatMute} onMute={()=>setHatMute(v=>!v)} solo={hatSolo} onSolo={()=>setHatSolo(v=>!v)} soloActive={anySolo} isDark={theme === 'dark'} />
-        <VerticalSlider label="Clap" value={clapVol} onChange={setClapVol} muted={anySolo?!clapSolo:clapMute} onMute={()=>setClapMute(v=>!v)} solo={clapSolo} onSolo={()=>setClapSolo(v=>!v)} soloActive={anySolo} color="#cc4422" isDark={theme === 'dark'} />
+        <VerticalSlider label="Bass" value={bassVol} onChange={setBassVol} muted={anySolo?!bassSolo:bassMute} onMute={()=>setBassMute(v=>!v)} solo={bassSolo} onSolo={()=>setBassSolo(v=>!v)} soloActive={anySolo} rec={bassRec} onRec={()=>{setBassRec(v=>!v);if(!bassRec){setBassMute(false);if(anySolo)setBassSolo(true);}}} isDark={theme === 'dark'} />
+        <VerticalSlider label="Kick" value={kickVol} onChange={setKickVol} muted={anySolo?!kickSolo:kickMute} onMute={()=>setKickMute(v=>!v)} solo={kickSolo} onSolo={()=>setKickSolo(v=>!v)} soloActive={anySolo} rec={kickRec} onRec={()=>{setKickRec(v=>!v);if(!kickRec){setKickMute(false);if(anySolo)setKickSolo(true);}}} isDark={theme === 'dark'} />
+        <VerticalSlider label="Hats" value={hatVol} onChange={setHatVol} muted={anySolo?!hatSolo:hatMute} onMute={()=>setHatMute(v=>!v)} solo={hatSolo} onSolo={()=>setHatSolo(v=>!v)} soloActive={anySolo} rec={hatRec} onRec={()=>{setHatRec(v=>!v);if(!hatRec){setHatMute(false);if(anySolo)setHatSolo(true);}}} isDark={theme === 'dark'} />
+        <VerticalSlider label="Clap" value={clapVol} onChange={setClapVol} muted={anySolo?!clapSolo:clapMute} onMute={()=>setClapMute(v=>!v)} solo={clapSolo} onSolo={()=>setClapSolo(v=>!v)} soloActive={anySolo} rec={clapRec} onRec={()=>{setClapRec(v=>!v);if(!clapRec){setClapMute(false);if(anySolo)setClapSolo(true);}}} color="#cc4422" isDark={theme === 'dark'} />
         <VerticalSlider label="Filt" value={filterCut} onChange={setFilterCut} min={80} max={4000} color="#e08040" muted={filterMute} onMute={()=>setFilterMute(v=>!v)} isDark={theme === 'dark'} />
         <VerticalSlider label="Dly" value={delayMix} onChange={setDelayMix} color="#d06030" muted={delayMute} onMute={()=>setDelayMute(v=>!v)} isDark={theme === 'dark'} />
         <VerticalSlider label="Drv" value={drive} onChange={setDrive} color="#c04020" muted={driveMute} onMute={()=>setDriveMute(v=>!v)} isDark={theme === 'dark'} />
