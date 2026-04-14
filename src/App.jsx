@@ -349,7 +349,21 @@ export default function App() {
     else{setPatterns(arr);patternsRef.current=arr;setActivePattern(idx);activePatternRef.current=idx;}
   },[playing]);
 
-  const selectFixed=useCallback((idx)=>{setSelectedPattern(idx);setIsRandom(false);setActiveSlot(null);loadPats(activePackageRef.current.patterns,idx);},[loadPats]);
+  const selectFixed=useCallback((idx)=>{
+    setSelectedPattern(idx);setIsRandom(false);setActiveSlot(null);
+    const pat=activePackageRef.current.patterns[idx];
+    if(pat?.channels){
+      const c=pat.channels;
+      if(c.bassVol!==undefined) setBassVol(c.bassVol);
+      if(c.kickVol!==undefined) setKickVol(c.kickVol);
+      if(c.hatVol!==undefined) setHatVol(c.hatVol);
+      if(c.clapVol!==undefined) setClapVol(c.clapVol);
+      if(c.filterCut!==undefined) setFilterCut(c.filterCut);
+      if(c.delayMix!==undefined) setDelayMix(c.delayMix);
+      if(c.drive!==undefined) setDrive(c.drive);
+    }
+    loadPats(activePackageRef.current.patterns,idx);
+  },[loadPats]);
 
   const triggerRandom=useCallback(()=>{
     const pkg=activePackageRef.current;

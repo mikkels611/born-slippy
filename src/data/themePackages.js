@@ -195,6 +195,7 @@ export const DARK_AND_LONG_SUB = {
       ohat:   [0,0,0.5,0,0,0,0.6,0,0,0,0.5,0,0,0,0.6,0],
       chat:   [0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15],
       clap:   [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+      channels: { bassVol:0.85, kickVol:0.75, hatVol:0.3, clapVol:0.45, filterCut:450, delayMix:0.2, drive:0.15 },
     },
     {
       name: "SLIDE",
@@ -205,6 +206,7 @@ export const DARK_AND_LONG_SUB = {
       ohat:   [0,0,0,0,0,0,0.5,0,0,0,0,0,0,0,0.6,0],
       chat:   [0,0,0.15,0,0,0,0,0.1,0,0,0.15,0,0,0,0,0.1],
       clap:   [0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+      channels: { bassVol:0.9, kickVol:0.6, hatVol:0.2, clapVol:0.35, filterCut:350, delayMix:0.55, drive:0.1 },
     },
     {
       name: "CLIMB",
@@ -215,6 +217,7 @@ export const DARK_AND_LONG_SUB = {
       ohat:   [0,0,0.6,0,0,0,0,0.5,0,0,0.6,0,0,0,0,0.5],
       chat:   [0.3,0.2,0,0.2,0.3,0.15,0.2,0,0.3,0.2,0,0.2,0.3,0.15,0.25,0],
       clap:   [0,0,0,0,1,0,0,0.2,0,0,0,0,1,0,0,0.3],
+      channels: { bassVol:0.8, kickVol:0.7, hatVol:0.35, clapVol:0.5, filterCut:600, delayMix:0.3, drive:0.25 },
     },
     {
       name: "DRONE",
@@ -225,6 +228,7 @@ export const DARK_AND_LONG_SUB = {
       ohat:   [0,0,0,0,0,0,0.4,0,0,0,0,0,0,0,0.4,0],
       chat:   [0.15,0,0.1,0,0.15,0,0,0,0.15,0,0.1,0,0.15,0,0,0.1],
       clap:   [0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+      channels: { bassVol:0.95, kickVol:0.65, hatVol:0.15, clapVol:0.3, filterCut:280, delayMix:0.4, drive:0.08 },
     },
   ],
 
