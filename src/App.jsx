@@ -200,11 +200,32 @@ export default function App() {
   const playBass=useCallback((ctx,time,freq,accent)=>{
     if(freq===0||mutesRef.current.bass)return;const f=freq*getPitch();
     sendMidiNote(midiChannels.bass, Math.round(12 * Math.log2(freq * getPitch() / 440) + 69), accent);
+    const sp=activePackageRef.current.synthParams;
+    const st=stepTimeRef.current;
+
     const o=ctx.createOscillator(),o2=ctx.createOscillator(),env=ctx.createGain();
-    o.type="sawtooth";o.frequency.setValueAtTime(f,time);o2.type="square";o2.frequency.setValueAtTime(f*1.002,time);o2.detune.setValueAtTime(-8,time);
-    env.gain.setValueAtTime(0,time);env.gain.linearRampToValueAtTime(accent*0.35,time+0.008);
-    env.gain.exponentialRampToValueAtTime(accent*0.18,time+0.06);env.gain.exponentialRampToValueAtTime(0.001,time+stepTimeRef.current*0.9);
-    o.connect(env);o2.connect(env);env.connect(nodesRef.current.bassGain);o.start(time);o2.start(time);o.stop(time+stepTimeRef.current);o2.stop(time+stepTimeRef.current);
+    o.type=sp?.osc1||"sawtooth";o.frequency.setValueAtTime(f,time);
+    o2.type=sp?.osc2||"square";o2.frequency.setValueAtTime(f*(sp?1.002:1.002),time);o2.detune.setValueAtTime(sp?.osc2Detune||-8,time);
+
+    const atk=sp?.attack||0.008;
+    const sus=sp?.sustainLevel||0.18;
+    const dec=sp?.decay||0.06;
+    env.gain.setValueAtTime(0,time);env.gain.linearRampToValueAtTime(accent*0.35,time+atk);
+    env.gain.exponentialRampToValueAtTime(accent*sus,time+atk+dec);env.gain.exponentialRampToValueAtTime(0.001,time+st*0.9);
+
+    o.connect(env);o2.connect(env);env.connect(nodesRef.current.bassGain);
+    o.start(time);o2.start(time);o.stop(time+st);o2.stop(time+st);
+
+    if(sp?.osc3){
+      const o3=ctx.createOscillator(),e3=ctx.createGain();
+      o3.type=sp.osc3;
+      const subF=sp.osc3Octave===-1?f*0.5:f;
+      o3.frequency.setValueAtTime(subF,time);
+      const lvl=sp.osc3Level||0.3;
+      e3.gain.setValueAtTime(0,time);e3.gain.linearRampToValueAtTime(accent*0.35*lvl,time+atk);
+      e3.gain.exponentialRampToValueAtTime(accent*sus*lvl,time+atk+dec);e3.gain.exponentialRampToValueAtTime(0.001,time+st*0.9);
+      o3.connect(e3);e3.connect(nodesRef.current.bassGain);o3.start(time);o3.stop(time+st);
+    }
   },[getPitch, sendMidiNote, midiChannels.bass]);
 
   const playKick=useCallback((ctx,time,vel)=>{

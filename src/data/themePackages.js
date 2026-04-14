@@ -14,6 +14,9 @@
  * - patternColors:  Array of 4 hex color strings for the pattern buttons
  * - scalePools:     Array of note-frequency arrays used by Random to generate
  *                   harmonically related variations
+ * - synthParams:    (optional) Per-package bass synthesis overrides:
+ *                     { osc1, osc2, osc3, osc2Detune, osc3Octave, osc3Level,
+ *                       attack, decay, sustainLevel }
  *
  * Future fields (reserved):
  * - price:          Number (catalogue purchase price)
@@ -165,46 +168,59 @@ export const DARK_AND_LONG_SUB = {
   formatVersion: PACKAGE_FORMAT_VERSION,
   name: "Dark & Long Sub",
   artist: "Underworld",
-  description: "Dark & Long dropped one octave — sub-bass weight for comparison",
+  description: "Minimoog sub-bass — fat detuned oscillators, long decay, deep groove",
   bpm: 135,
   key: "Am",
 
+  // Minimoog-style synthesis: 3 detuned saws, slower attack, long fat decay
+  synthParams: {
+    osc1: "sawtooth",
+    osc2: "sawtooth",
+    osc3: "sawtooth",       // third oscillator one octave below
+    osc2Detune: 12,         // cents — wider than default for chorus
+    osc3Octave: -1,         // sub oscillator
+    osc3Level: 0.5,         // sub level relative to main
+    attack: 0.015,          // slightly slower attack — Moog warmth
+    decay: 0.25,            // long sustain tail
+    sustainLevel: 0.28,     // fat sustained tone
+  },
+
   patterns: [
     {
-      name: "PULSE",
-      description: "A1 sub-bass groove — one octave below the original PULSE",
-      bass:   [55,55,41.20,55,55,49,55,41.20,55,55,65.41,55,49,41.20,55,36.71],
-      accent: [1,0.4,0.7,0.3,0.9,0.5,0.6,0.4,1,0.3,0.8,0.4,0.7,0.5,0.9,0.3],
-      kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0.15],
+      name: "THROB",
+      description: "Syncopated A1 sub pulse with octave jumps — classic Moog groove",
+      bass:   [55,0,55,0,55,49,0,55,0,55,41.20,0,55,0,49,55],
+      accent: [1,0,0.7,0,0.9,0.6,0,0.5,0,0.8,0.7,0,1,0,0.6,0.4],
+      kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
       ohat:   [0,0,0.5,0,0,0,0.6,0,0,0,0.5,0,0,0,0.6,0],
       chat:   [0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15],
       clap:   [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
     },
     {
-      name: "DUB",
-      description: "Sparse notes with rests — designed for delay effects to fill the space",
-      bass:   [110,0,0,82.41,0,0,98,0,110,0,0,0,82.41,0,0,0],
-      accent: [1,0,0,0.6,0,0,0.7,0,0.9,0,0,0,0.5,0,0,0],
+      name: "SLIDE",
+      description: "Walking sub-bass with chromatic steps — delay fills the gaps",
+      bass:   [55,0,0,49,0,46.25,0,0,55,0,0,0,41.20,0,43.65,0],
+      accent: [1,0,0,0.7,0,0.6,0,0,0.9,0,0,0,0.8,0,0.5,0],
       kick:   [1,0,0,0,1,0,0,0.15,1,0,0,0,0,0,0,0],
       ohat:   [0,0,0,0,0,0,0.5,0,0,0,0,0,0,0,0.6,0],
       chat:   [0,0,0.15,0,0,0,0,0.1,0,0,0.15,0,0,0,0,0.1],
       clap:   [0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
     },
     {
-      name: "RISE",
-      description: "Ascending phrases reaching C3 — busier kicks with ghost notes, building energy",
-      bass:   [110,110,130.81,110,82.41,98,110,130.81,110,98,110,130.81,82.41,98,110,110],
-      accent: [1,0.5,0.8,0.4,0.7,0.6,0.9,0.7,1,0.4,0.8,0.7,0.6,0.5,1,0.3],
+      name: "CLIMB",
+      description: "Sub-bass ascending from A1 through D2 to E2 — builds with ghost kicks",
+      bass:   [55,55,0,55,65.41,0,55,73.42,55,0,65.41,73.42,82.41,0,55,0],
+      accent: [1,0.5,0,0.4,0.8,0,0.6,0.9,1,0,0.7,0.8,0.9,0,0.5,0],
       kick:   [1,0,0,0.2,1,0,0.3,0,1,0,0,0.2,1,0,0.3,0],
       ohat:   [0,0,0.6,0,0,0,0,0.5,0,0,0.6,0,0,0,0,0.5],
       chat:   [0.3,0.2,0,0.2,0.3,0.15,0.2,0,0.3,0.2,0,0.2,0.3,0.15,0.25,0],
       clap:   [0,0,0,0,1,0,0,0.2,0,0,0,0,1,0,0,0.3],
     },
     {
-      name: "DEEP",
-      description: "Hypnotic A2 drone with subtle G2/E2 descent — minimal drums, maximum atmosphere",
-      bass:   [110,110,110,110,110,110,110,110,98,98,82.41,82.41,110,110,110,110],
-      accent: [1,0.2,0.3,0.15,0.8,0.2,0.25,0.15,0.9,0.2,0.3,0.15,1,0.2,0.25,0.15],
+      name: "DRONE",
+      description: "Sustained A1 sub drone with occasional E1 drops — hypnotic weight",
+      bass:   [55,55,55,55,55,55,55,55,41.20,41.20,55,55,55,55,55,55],
+      accent: [1,0.3,0.35,0.2,0.8,0.25,0.3,0.2,0.9,0.4,0.35,0.2,1,0.25,0.3,0.2],
       kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
       ohat:   [0,0,0,0,0,0,0.4,0,0,0,0,0,0,0,0.4,0],
       chat:   [0.15,0,0.1,0,0.15,0,0,0,0.15,0,0.1,0,0.15,0,0,0.1],
@@ -212,7 +228,7 @@ export const DARK_AND_LONG_SUB = {
     },
   ],
 
-  patternColors: ["#2040a0", "#20a0a0", "#c09020", "#8020a0"],
+  patternColors: ["#2040a0", "#1880a0", "#a07020", "#6020a0"],
 
   scalePools: [
     [55, 49, 41.20, 65.41, 36.71],
