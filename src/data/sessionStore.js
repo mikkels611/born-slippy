@@ -1,4 +1,4 @@
-const SESSION_VERSION = 1;
+const SESSION_VERSION = 2;
 
 export function persistSlots(slots) {
   try { localStorage.setItem("born-slippy-slots", JSON.stringify(slots)); } catch(e){} 

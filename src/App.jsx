@@ -1,12 +1,22 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { BPM, STEP_TIME, STEPS, WHOLE_TONE_DOWN, MINOR_THIRD_UP, PATTERN_COLORS, RND_COLORS } from "./data/constants";
-import { FIXED_PATTERNS, generateRandomPattern } from "./data/patterns";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { STEPS, WHOLE_TONE_DOWN, MINOR_THIRD_UP, RND_COLORS, getStepTime } from "./data/constants";
+import { generateRandomPattern } from "./data/patterns";
+import { THEME_PACKAGES, BORN_SLIPPY, getPackageById } from "./data/themePackages";
 import { persistSlots, loadSlotsAsync, exportSession, importSession } from "./data/sessionStore";
 import { createDistortionCurve } from "./audio/utils";
 import VerticalSlider from "./components/VerticalSlider";
 import SlotButton from "./components/SlotButton";
 
 export default function App() {
+  const [activePackage, setActivePackage] = useState(() => {
+    const saved = localStorage.getItem('born-slippy-package');
+    return saved ? (getPackageById(saved) || BORN_SLIPPY) : BORN_SLIPPY;
+  });
+  const bpm = activePackage.bpm;
+  const stepTime = useMemo(() => getStepTime(bpm), [bpm]);
+  const stepTimeRef = useRef(stepTime);
+  const activePackageRef = useRef(activePackage);
+
   const [playing, setPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bassVol, setBassVol] = useState(0.7);
@@ -18,7 +28,7 @@ export default function App() {
   const [drive, setDrive] = useState(0.3);
   const [selectedPattern, setSelectedPattern] = useState(0);
   const [activePattern, setActivePattern] = useState(0);
-  const [patterns, setPatterns] = useState(FIXED_PATTERNS);
+  const [patterns, setPatterns] = useState(activePackage.patterns);
   const [isRandom, setIsRandom] = useState(false);
   const [currentRandom, setCurrentRandom] = useState(null);
   const [noteDown, setNoteDown] = useState(false);
@@ -53,7 +63,7 @@ export default function App() {
   const ctxRef=useRef(null); const timerRef=useRef(null); const stepRef=useRef(0);
   const nodesRef=useRef({}); const activePatternRef=useRef(0);
   const pendingPatternRef=useRef(null); const pendingPatternsRef=useRef(null);
-  const patternsRef=useRef(FIXED_PATTERNS);
+  const patternsRef=useRef(activePackage.patterns);
   const pitchRef=useRef({ noteDown:false, thirdUp:false });
   const mutesRef=useRef({ bass:false, kick:false, hat:false, clap:false });
   const clapVolRef=useRef(0.5);
@@ -84,6 +94,8 @@ export default function App() {
   useEffect(()=>{ seqCurrentSlotRef.current=seqCurrentSlot; },[seqCurrentSlot]);
   useEffect(()=>{ playingRef.current=playing; },[playing]);
   useEffect(()=>{ savedSlotsRef.current=savedSlots; },[savedSlots]);
+  useEffect(()=>{ stepTimeRef.current=stepTime; },[stepTime]);
+  useEffect(()=>{ activePackageRef.current=activePackage; },[activePackage]);
 
   useEffect(() => {
     if (navigator.requestMIDIAccess) {
@@ -110,7 +122,7 @@ export default function App() {
     const hatGain=ctx.createGain();hatGain.gain.value=hatVol;hatGain.connect(master);
     const clapGain=ctx.createGain();clapGain.gain.value=clapVol;clapGain.connect(master);
     const delaySend=ctx.createGain();delaySend.gain.value=delayMix;
-    const delay=ctx.createDelay(2);delay.delayTime.value=STEP_TIME*3;
+    const delay=ctx.createDelay(2);delay.delayTime.value=stepTimeRef.current*3;
     const delayFb=ctx.createGain();delayFb.gain.value=0.4;
     const delayFilt=ctx.createBiquadFilter();delayFilt.type="highpass";delayFilt.frequency.value=400;
     delaySend.connect(delay);delay.connect(delayFb);delayFb.connect(delay);delay.connect(delayFilt);delayFilt.connect(master);
@@ -181,7 +193,7 @@ export default function App() {
       if (target.filterCut !== undefined) setFilterCut(start.filterCut + (target.filterCut - start.filterCut) * progress);
       if (target.delayMix !== undefined) setDelayMix(start.delayMix + (target.delayMix - start.delayMix) * progress);
       if (target.drive !== undefined) setDrive(start.drive + (target.drive - start.drive) * progress);
-    }, STEP_TIME * 1000);
+    }, stepTimeRef.current * 1000);
     fadeTimerRef.current = timer;
   }, [getChannelSnapshot, restoreChannelSnapshot, fadeSteps]);
 
@@ -191,8 +203,8 @@ export default function App() {
     const o=ctx.createOscillator(),o2=ctx.createOscillator(),env=ctx.createGain();
     o.type="sawtooth";o.frequency.setValueAtTime(f,time);o2.type="square";o2.frequency.setValueAtTime(f*1.002,time);o2.detune.setValueAtTime(-8,time);
     env.gain.setValueAtTime(0,time);env.gain.linearRampToValueAtTime(accent*0.35,time+0.008);
-    env.gain.exponentialRampToValueAtTime(accent*0.18,time+0.06);env.gain.exponentialRampToValueAtTime(0.001,time+STEP_TIME*0.9);
-    o.connect(env);o2.connect(env);env.connect(nodesRef.current.bassGain);o.start(time);o2.start(time);o.stop(time+STEP_TIME);o2.stop(time+STEP_TIME);
+    env.gain.exponentialRampToValueAtTime(accent*0.18,time+0.06);env.gain.exponentialRampToValueAtTime(0.001,time+stepTimeRef.current*0.9);
+    o.connect(env);o2.connect(env);env.connect(nodesRef.current.bassGain);o.start(time);o2.start(time);o.stop(time+stepTimeRef.current);o2.stop(time+stepTimeRef.current);
   },[getPitch, sendMidiNote, midiChannels.bass]);
 
   const playKick=useCallback((ctx,time,vel)=>{
@@ -257,7 +269,8 @@ export default function App() {
           if(nextIdx!==null){
             seqCurrentSlotRef.current=nextIdx;
             const slot=slots[nextIdx];
-            const arr=slot.fixedIndex>=0?FIXED_PATTERNS:[...FIXED_PATTERNS,slot];
+            const pkgPats=activePackageRef.current.patterns;
+            const arr=slot.fixedIndex>=0?pkgPats:[...pkgPats,slot];
             const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
             pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
             setTimeout(()=>{
@@ -288,7 +301,8 @@ export default function App() {
         const slot=slots[cur];
         seqCurrentSlotRef.current=cur; setSeqCurrentSlot(cur); setActiveSlot(cur);
         restoreSnapshotRef.current&&restoreSnapshotRef.current(slot.channels);
-        const arr=slot.fixedIndex>=0?FIXED_PATTERNS:[...FIXED_PATTERNS,slot];
+        const pkgPats2=activePackageRef.current.patterns;
+        const arr=slot.fixedIndex>=0?pkgPats2:[...pkgPats2,slot];
         const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
         patternsRef.current=arr; setPatterns(arr); activePatternRef.current=patIdx; setActivePattern(patIdx);
       }
@@ -296,7 +310,7 @@ export default function App() {
       activePatternRef.current=selectedPattern; setActivePattern(selectedPattern);
     }
     let nextTime=ctx.currentTime+0.05;
-    const sched=()=>{while(nextTime<ctx.currentTime+0.2){scheduleStep(ctx,stepRef.current,nextTime);const s=stepRef.current%STEPS;setTimeout(()=>setCurrentStep(s),(nextTime-ctx.currentTime)*1000);nextTime+=STEP_TIME;stepRef.current++;}timerRef.current=setTimeout(sched,100);};
+    const sched=()=>{while(nextTime<ctx.currentTime+0.2){scheduleStep(ctx,stepRef.current,nextTime);const s=stepRef.current%STEPS;setTimeout(()=>setCurrentStep(s),(nextTime-ctx.currentTime)*1000);nextTime+=stepTimeRef.current;stepRef.current++;}timerRef.current=setTimeout(sched,100);};
     playingRef.current=true;
     sched();setPlaying(true);
   },[initAudio,scheduleStep,selectedPattern]);
@@ -314,13 +328,14 @@ export default function App() {
     else{setPatterns(arr);patternsRef.current=arr;setActivePattern(idx);activePatternRef.current=idx;}
   },[playing]);
 
-  const selectFixed=useCallback((idx)=>{setSelectedPattern(idx);setIsRandom(false);setActiveSlot(null);loadPats(FIXED_PATTERNS,idx);},[loadPats]);
+  const selectFixed=useCallback((idx)=>{setSelectedPattern(idx);setIsRandom(false);setActiveSlot(null);loadPats(activePackageRef.current.patterns,idx);},[loadPats]);
 
   const triggerRandom=useCallback(()=>{
-    const rnd=generateRandomPattern();setCurrentRandom(rnd);
+    const pkg=activePackageRef.current;
+    const rnd=generateRandomPattern(pkg);setCurrentRandom(rnd);
     const newIdx = (rndColorIdx + 1) % RND_COLORS.length;
     setRndColorIdx(newIdx); setRndColor(RND_COLORS[newIdx]);
-    const arr=[...FIXED_PATTERNS,rnd];
+    const arr=[...pkg.patterns,rnd];
     setSelectedPattern(4);setIsRandom(true);setActiveSlot(null);loadPats(arr,4);
   },[loadPats, rndColorIdx]);
 
@@ -344,9 +359,9 @@ export default function App() {
       if (slot.fixedIndex >= 0) {
         setSelectedPattern(slot.fixedIndex);setIsRandom(false);setCurrentRandom(null);
         if (fadeMode && activeSlot !== idx) { startFade(slot.channels); } else { restoreChannelSnapshot(slot.channels); }
-        loadPats(FIXED_PATTERNS, slot.fixedIndex);
+        loadPats(activePackage.patterns, slot.fixedIndex);
       } else {
-        const arr=[...FIXED_PATTERNS,slot];
+        const arr=[...activePackage.patterns,slot];
         setSelectedPattern(4);setIsRandom(true);setCurrentRandom(slot);
         if(slot.color) setRndColor(slot.color);
         if (fadeMode && activeSlot !== idx) { startFade(slot.channels); } else { restoreChannelSnapshot(slot.channels); }
@@ -355,8 +370,8 @@ export default function App() {
     } else {
       let pat, color, fixedIndex = -1;
       if (!isRandom && activePattern < 4) {
-        pat = FIXED_PATTERNS[activePattern];
-        color = PATTERN_COLORS[activePattern];
+        pat = activePackage.patterns[activePattern];
+        color = activePackage.patternColors[activePattern];
         fixedIndex = activePattern;
       } else if (currentRandom) {
         pat = currentRandom;
@@ -368,7 +383,7 @@ export default function App() {
       newSlots[idx] = { ...pat, name:`S${idx+1}`, color, channels: getChannelSnapshot(), fixedIndex };
       setSavedSlots(newSlots);setActiveSlot(idx);persistSlots(newSlots);
     }
-  },[savedSlots,currentRandom,patterns,activePattern,isRandom,loadPats,rndColor,getChannelSnapshot,restoreChannelSnapshot,fadeMode,startFade,activeSlot]);
+  },[savedSlots,currentRandom,patterns,activePattern,isRandom,loadPats,rndColor,getChannelSnapshot,restoreChannelSnapshot,fadeMode,startFade,activeSlot,activePackage]);
 
   const handleSlotDelete=useCallback((idx)=>{
     const newSlots=[...savedSlots];newSlots[idx]=null;
@@ -389,9 +404,11 @@ export default function App() {
       fadeSteps,
       seqPlay,
       seqBars,
+      bpm,
+      themePackageId: activePackage.id,
     };
     exportSession(savedSlots, settings);
-  }, [savedSlots, theme, fadeMode, fadeSteps, seqPlay, seqBars]);
+  }, [savedSlots, theme, fadeMode, fadeSteps, seqPlay, seqBars, bpm, activePackage]);
 
   const handleImport = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -411,6 +428,10 @@ export default function App() {
         if (data.settings.fadeSteps) setFadeSteps(data.settings.fadeSteps);
         if (data.settings.seqPlay !== undefined) setSeqPlay(data.settings.seqPlay);
         if (data.settings.seqBars) setSeqBars(data.settings.seqBars);
+        if (data.settings.themePackageId) {
+          const pkg = getPackageById(data.settings.themePackageId);
+          switchPackage(pkg);
+        }
       }
     } catch (err) {
       alert(err.message);
@@ -437,8 +458,38 @@ export default function App() {
   useEffect(()=>{ localStorage.setItem('born-slippy-seqbars', seqBars); },[seqBars]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
-  const displayPat=patterns[activePattern]||FIXED_PATTERNS[0];
-  const getNoteName=()=>{if(noteDown)return"D";if(thirdUp)return"G";return"E";};
+  const switchPackage = useCallback((pkg) => {
+    if (playing) return;
+    setActivePackage(pkg);
+    activePackageRef.current = pkg;
+    stepTimeRef.current = getStepTime(pkg.bpm);
+    setPatterns(pkg.patterns);
+    patternsRef.current = pkg.patterns;
+    setActivePattern(0);
+    activePatternRef.current = 0;
+    setSelectedPattern(0);
+    setIsRandom(false);
+    setCurrentRandom(null);
+    setActiveSlot(null);
+    localStorage.setItem('born-slippy-package', pkg.id);
+    if (nodesRef.current.delay) {
+      nodesRef.current.delay.delayTime.value = getStepTime(pkg.bpm) * 3;
+    }
+  }, [playing]);
+
+  const displayPat=patterns[activePattern]||activePackage.patterns[0];
+  const getNoteName=()=>{
+    const keyBase=activePackage.key.replace("m","");
+    if(noteDown){
+      const semitoneDown={"E":"D","A":"G","C":"Bb","D":"C","F":"Eb","G":"F","B":"A"};
+      return semitoneDown[keyBase]||keyBase;
+    }
+    if(thirdUp){
+      const thirdUpMap={"E":"G","A":"C","C":"Eb","D":"F","F":"Ab","G":"Bb","B":"D"};
+      return thirdUpMap[keyBase]||keyBase;
+    }
+    return keyBase;
+  };
 
   const handlePlayDown=useCallback(()=>{
     playBtnTimerRef.current=setTimeout(()=>{
@@ -462,13 +513,22 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:theme === 'dark' ? '#0d0d0d' : '#f6f7f9', fontFamily:"'Space Mono', monospace", color:theme === 'dark' ? '#fff' : '#111', display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 10px 24px", gap:12, backgroundImage:theme === 'dark' ? "radial-gradient(circle at 50% 15%, rgba(224,80,32,0.04) 0%, transparent 60%)" : "radial-gradient(circle at 50% 15%, rgba(224,80,32,0.08) 0%, transparent 60%)", WebkitTapHighlightColor:"transparent", userSelect:"none" }}>
       <div style={{ textAlign:"center" }}>
-        <h1 style={{ fontSize:14, letterSpacing:7, color:"#e05020", margin:0, fontWeight:700 }}>BORN SLIPPY</h1>
-        <div style={{ fontSize:10, color:theme === 'dark' ? '#555' : '#666', letterSpacing:3, marginTop:3 }}>{BPM} BPM • {getNoteName()} MINOR</div>
+        <h1 style={{ fontSize:14, letterSpacing:7, color:activePackage.patternColors[0], margin:0, fontWeight:700 }}>BORN SLIPPY</h1>
+        <div style={{ fontSize:10, color:theme === 'dark' ? '#555' : '#666', letterSpacing:3, marginTop:3 }}>{bpm} BPM • {getNoteName()} MINOR</div>
+      </div>
+
+      <div style={{ display:"flex", gap:4, width:"100%", maxWidth:380 }}>
+        {THEME_PACKAGES.map((pkg)=>{
+          const isAct=pkg.id===activePackage.id;
+          return(<button key={pkg.id} onClick={()=>switchPackage(pkg)} disabled={playing} style={{ ...btn, flex:1, padding:"7px 2px", borderRadius:6, fontSize:8, letterSpacing:1, background:isAct?(theme === 'dark' ? "#1a1a1a" : "#d0d0d0"):(theme === 'dark' ? "#111" : "#e8e8e8"), border:`2px solid ${isAct?pkg.patternColors[0]:(theme === 'dark' ? "#222" : "#ccc")}`, color:isAct?pkg.patternColors[0]:(theme === 'dark' ? "#555" : "#999"), opacity:playing&&!isAct?0.4:1 }}>
+            {pkg.name}<br/><span style={{fontSize:7,opacity:0.7}}>{pkg.bpm} BPM • {pkg.key}</span>
+          </button>);
+        })}
       </div>
 
       <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
-        {FIXED_PATTERNS.map((pat,idx)=>{
-          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=PATTERN_COLORS[idx];
+        {activePackage.patterns.map((pat,idx)=>{
+          const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=activePackage.patternColors[idx];
           return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"9px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, background:isA?pc:isQ?(theme === 'dark' ? `${pc}22` : `${pc}18`):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?`2px solid ${pc}`:isA?`2px solid ${pc}`:`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#fff":isQ?pc:(theme === 'dark' ? "#666" : "#222") }}>
             {pat.name}{isQ&&<div style={{fontSize:6,marginTop:1,opacity:0.8}}>NEXT</div>}
           </button>);
@@ -583,7 +643,7 @@ export default function App() {
           </label>
         </div>
         <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
-          Fade time: {(fadeSteps * STEP_TIME * 1000).toFixed(0)}ms ({fadeSteps} steps)
+          Fade time: {(fadeSteps * stepTime * 1000).toFixed(0)}ms ({fadeSteps} steps)
         </div>
       </div>
 

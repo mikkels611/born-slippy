@@ -5,7 +5,7 @@ const NOTE_FREQS = {
   C3: 130.81, D3: 146.83, E3: 164.81,
 };
 
-const SCALE_POOLS = [
+const DEFAULT_SCALE_POOLS = [
   [NOTE_FREQS.E2, NOTE_FREQS.G2, NOTE_FREQS.A2, NOTE_FREQS.B2, NOTE_FREQS.D2],
   [NOTE_FREQS.E2, NOTE_FREQS.Fs2, NOTE_FREQS.G2, NOTE_FREQS.A2, NOTE_FREQS.B2, NOTE_FREQS.C3, NOTE_FREQS.D3],
   [NOTE_FREQS.E2, NOTE_FREQS.G2, NOTE_FREQS.B2, NOTE_FREQS.E3],
@@ -27,8 +27,9 @@ export const HAT_TEMPLATES = {
 
 export const CLAP_TEMPLATES = [[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,0,0,1,0,0,0.2,0,0,0,0,1,0,0,0.3],[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0.3,0,1,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0.2]];
 
-function generateBassLine() {
-  const pool = SCALE_POOLS[Math.floor(Math.random() * SCALE_POOLS.length)];
+function generateBassLine(scalePools) {
+  const pools = scalePools || DEFAULT_SCALE_POOLS;
+  const pool = pools[Math.floor(Math.random() * pools.length)];
   const root = pool[0]; const bass = new Array(16); const accent = new Array(16);
   const st = Math.random();
   if (st < 0.25) {
@@ -47,8 +48,8 @@ function generateBassLine() {
   return { bass, accent };
 }
 
-export function generateRandomPattern() {
-  const { bass, accent } = generateBassLine();
+export function generateRandomPattern(themePackage) {
+  const { bass, accent } = generateBassLine(themePackage?.scalePools);
   const kick=[...KICK_TEMPLATES[Math.floor(Math.random()*KICK_TEMPLATES.length)]];
   const ohat=[...HAT_TEMPLATES.open[Math.floor(Math.random()*HAT_TEMPLATES.open.length)]];
   const chat=[...HAT_TEMPLATES.closed[Math.floor(Math.random()*HAT_TEMPLATES.closed.length)]];
@@ -57,9 +58,5 @@ export function generateRandomPattern() {
   return { name:"RND", bass, accent, kick, ohat, chat, clap };
 }
 
-export const FIXED_PATTERNS = [
-  { name:"DRIVE", bass:[82.41,82.41,98.0,98.0,110.0,110.0,98.0,82.41,82.41,82.41,123.47,110.0,98.0,82.41,82.41,73.42], accent:[1,0.4,0.8,0.3,0.9,0.4,0.7,0.6,1,0.3,0.8,0.5,0.7,0.9,0.4,0.6], kick:[1,0,0,0.15,1,0,0,0,1,0,0,0.15,1,0,0.2,0], ohat:[0,0,0.5,0,0,0,0.7,0,0,0,0.5,0,0,0,0.7,0.3], chat:[0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15,0.3,0.15,0.2,0.15], clap:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0] },
-  { name:"BREAK", bass:[82.41,0,0,82.41,0,0,98.0,0,82.41,0,0,73.42,0,0,82.41,0], accent:[1,0,0,0.5,0,0,0.7,0,0.9,0,0,0.6,0,0,0.8,0], kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], ohat:[0,0,0,0,0,0,0.5,0,0,0,0,0,0,0,0.6,0], chat:[0,0,0.2,0,0,0,0,0.15,0,0,0.2,0,0,0,0,0.15], clap:[0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0.4] },
-  { name:"PUSH", bass:[82.41,0,98.0,82.41,110.0,0,123.47,98.0,82.41,0,98.0,110.0,123.47,98.0,82.41,0], accent:[1,0,0.7,0.4,0.9,0,0.8,0.5,1,0,0.7,0.6,0.8,0.5,0.9,0], kick:[1,0,0,0.3,1,0,0,0,0,0,1,0,1,0,0.4,0], ohat:[0,0,0.6,0,0,0,0,0.5,0,0,0.6,0,0,0,0,0.6], chat:[0.3,0.2,0,0.2,0.3,0.15,0.25,0,0.3,0.2,0,0.2,0.3,0.15,0.25,0], clap:[0,0,0,0,1,0,0,0,0,0,0.3,0,1,0,0,0.25] },
-  { name:"DARK", bass:[82.41,82.41,82.41,82.41,82.41,82.41,82.41,82.41,73.42,73.42,73.42,73.42,82.41,82.41,82.41,82.41], accent:[1,0.2,0.3,0.15,0.8,0.15,0.2,0.1,0.9,0.2,0.25,0.15,1,0.15,0.3,0.2], kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0.2], ohat:[0,0,0,0,0,0,0.4,0,0,0,0,0,0,0,0.4,0], chat:[0.15,0,0.1,0,0.15,0,0,0,0.15,0,0.1,0,0.15,0,0,0.1], clap:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0] },
-];
+// FIXED_PATTERNS removed — patterns now live inside Theme Packages
+// (see src/data/themePackages.js)
