@@ -1,0 +1,32 @@
+name: Deploy DEV
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          BASE_PATH: /dev-born-slippy/
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.DEV_DEPLOY_TOKEN }}
+          external_repository: mikkels611/dev-born-slippy
+          publish_dir: ./dist
+          publish_branch: gh-pages

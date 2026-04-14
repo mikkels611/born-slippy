@@ -6,7 +6,7 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
 export default defineConfig({
   plugins: [react()],
-  base: '/born-slippy/',
+  base: process.env.BASE_PATH || '/born-slippy/',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
