@@ -668,11 +668,14 @@ export default function App() {
           </div>
         ))}
         <div style={{ display:"flex", gap:6, marginTop:8, justifyContent:"center" }}>
-          <button onClick={handleExport} style={{ ...btn, flex:1, maxWidth:180, padding:"8px 6px", borderRadius:6, fontSize:8, letterSpacing:1.5, background:theme === 'dark' ? "#161616" : "#dedede", border:`1px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:theme === 'dark' ? "#888" : "#444" }}>
-            ↓ EXPORT SESSION
+          <button onClick={handleExport} style={{ ...btn, flex:1, maxWidth:120, padding:"8px 6px", borderRadius:6, fontSize:8, letterSpacing:1.5, background:theme === 'dark' ? "#161616" : "#dedede", border:`1px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:theme === 'dark' ? "#888" : "#444" }}>
+            ↓ EXPORT
           </button>
-          <button onClick={()=>importFileRef.current?.click()} style={{ ...btn, flex:1, maxWidth:180, padding:"8px 6px", borderRadius:6, fontSize:8, letterSpacing:1.5, background:theme === 'dark' ? "#161616" : "#dedede", border:`1px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:theme === 'dark' ? "#888" : "#444" }}>
-            ↑ IMPORT SESSION
+          <button onClick={()=>importFileRef.current?.click()} style={{ ...btn, flex:1, maxWidth:120, padding:"8px 6px", borderRadius:6, fontSize:8, letterSpacing:1.5, background:theme === 'dark' ? "#161616" : "#dedede", border:`1px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:theme === 'dark' ? "#888" : "#444" }}>
+            ↑ IMPORT
+          </button>
+          <button onClick={()=>{ if(confirm('Clear all 24 slots?')){const empty=Array(24).fill(null);setSavedSlots(empty);persistSlots(empty);setActiveSlot(null);} }} style={{ ...btn, flex:1, maxWidth:120, padding:"8px 6px", borderRadius:6, fontSize:8, letterSpacing:1.5, background:theme === 'dark' ? "#161616" : "#dedede", border:`1px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:theme === 'dark' ? "#c04020" : "#a03018" }}>
+            ✕ CLEAR
           </button>
           <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{ display:"none" }} />
         </div>
