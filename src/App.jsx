@@ -799,58 +799,60 @@ export default function App() {
         color: isRandom&&activePattern===4 ? "#fff" : isRandom ? rndColor : (theme === 'dark' ? "#555" : "#222"),
       }}>⟳ RANDOM</button>
 
-      <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-        {[0,8].map((off)=>(
-          <div key={off} style={{ display:"flex", gap:4 }}>
-            {Array.from({length:8}).map((_,i)=>{const step=off+i;const a=step===currentStep;
-              return<div key={step} style={{ width:16, height:16, borderRadius:3, background:a?"#e05020":displayPat.kick[step]>=1?(theme === 'dark' ? "#444" : "#666"):(theme === 'dark' ? "#1e1e1e" : "#d1d1d1"), boxShadow:a?"0 0 10px rgba(224,80,32,0.7)":"none", border:step%4===0?`1px solid ${theme === 'dark' ? "#333" : "#888"}`:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#bbb"}`, transition:"background 0.04s" }} />;
-            })}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6, width:"100%", maxWidth:380 }}>
         {advanced && <button onClick={toggleNoteDown} style={{
-          ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
+          ...btn, width:40, height:40, borderRadius:8, fontSize:8, letterSpacing:0.5,
           background:noteDown?"#1a2a1a":(theme === 'dark' ? "#161616" : "#d9d9d9"),
           border:`2px solid ${noteDown?"#40a040":(theme === 'dark' ? "#2a2a2a" : "#999")}`,
           color:noteDown?"#40a040":(theme === 'dark' ? "#d9d9d9" : "#222"),
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
-          boxShadow:noteDown?"0 0 10px rgba(64,160,64,0.2)":"none",
-        }}><span style={{fontSize:13}}>↓</span><span>NOTE</span></button>}
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0,
+          boxShadow:noteDown?"0 0 10px rgba(64,160,64,0.2)":"none", flexShrink:0,
+        }}><span style={{fontSize:11}}>↓</span><span>NOTE</span></button>}
+        <div style={{ display:"flex", flexDirection:"column", gap:3, flex:1, alignItems:"center" }}>
+          {[0,8].map((off)=>(
+            <div key={off} style={{ display:"flex", gap:4 }}>
+              {Array.from({length:8}).map((_,i)=>{const step=off+i;const a=step===currentStep;
+                return<div key={step} style={{ width:16, height:16, borderRadius:3, background:a?"#e05020":displayPat.kick[step]>=1?(theme === 'dark' ? "#444" : "#666"):(theme === 'dark' ? "#1e1e1e" : "#d1d1d1"), boxShadow:a?"0 0 10px rgba(224,80,32,0.7)":"none", border:step%4===0?`1px solid ${theme === 'dark' ? "#333" : "#888"}`:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#bbb"}`, transition:"background 0.04s" }} />;
+              })}
+            </div>
+          ))}
+        </div>
+        {advanced && <button onClick={toggleThirdUp} style={{
+          ...btn, width:40, height:40, borderRadius:8, fontSize:8, letterSpacing:0.5,
+          background:thirdUp?"#1a1a2a":(theme === 'dark' ? "#161616" : "#d9d9d9"),
+          border:`2px solid ${thirdUp?"#4080e0":(theme === 'dark' ? "#2a2a2a" : "#999")}`,
+          color:thirdUp?"#4080e0":(theme === 'dark' ? "#d9d9d9" : "#222"),
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0,
+          boxShadow:thirdUp?"0 0 10px rgba(64,128,224,0.2)":"none", flexShrink:0,
+        }}><span style={{fontSize:11}}>↑</span><span>III</span></button>}
+      </div>
 
-        <button onClick={handleStop} style={{
-          ...btn, width:44, height:44, borderRadius:"50%", fontSize:14,
-          background:theme === 'dark' ? "linear-gradient(145deg, #222, #1a1a1a)" : "linear-gradient(145deg, #ddd, #ccc)",
-          border:`2px solid ${theme === 'dark' ? "#444" : "#999"}`, color:theme === 'dark' ? "#888" : "#555",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          userSelect:"none", WebkitUserSelect:"none",
-        }}>■</button>
-
+      <div style={{ display:"flex", alignItems:"center", gap:12, width:"100%", maxWidth:380 }}>
         <button onClick={handlePlayPause} style={{
           ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
           background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
           border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#000":"#888",
           boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center",
-          userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
-        }}>{playing ? <span style={{display:"flex",gap:4}}><span style={{width:5,height:18,background:"#000",borderRadius:1}}/><span style={{width:5,height:18,background:"#000",borderRadius:1}}/></span> : "▶"}</button>
+          userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", flexShrink:0,
+        }}>{playing ? <span style={{display:"flex",gap:4}}><span style={{width:5,height:18,background:"#000",borderRadius:1}}/><span style={{width:5,height:18,background:"#000",borderRadius:1}}/></span> : <span style={{marginLeft:3}}>▶</span>}</button>
 
-        {advanced && <button onClick={toggleThirdUp} style={{
-          ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
-          background:thirdUp?"#1a1a2a":(theme === 'dark' ? "#161616" : "#d9d9d9"),
-          border:`2px solid ${thirdUp?"#4080e0":(theme === 'dark' ? "#2a2a2a" : "#999")}`,
-          color:thirdUp?"#4080e0":(theme === 'dark' ? "#d9d9d9" : "#222"),
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
-          boxShadow:thirdUp?"0 0 10px rgba(64,128,224,0.2)":"none",
-        }}><span style={{fontSize:13}}>↑</span><span>III</span></button>}
+        <button onClick={handleStop} style={{
+          ...btn, width:72, height:72, borderRadius:"50%", fontSize:20,
+          background:theme === 'dark' ? "linear-gradient(145deg, #222, #1a1a1a)" : "linear-gradient(145deg, #ddd, #ccc)",
+          border:`3px solid ${theme === 'dark' ? "#444" : "#999"}`, color:theme === 'dark' ? "#888" : "#555",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          userSelect:"none", WebkitUserSelect:"none", flexShrink:0,
+        }}>■</button>
+
+        <div style={{flex:1}} />
 
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
           ...btn, width:44, height:44, borderRadius:10, fontSize:18,
           background:theme==='dark'?'#161616':'#e0e0e0',
           border:`2px solid ${theme==='dark'?'#444':'#ccc'}`,
           color:theme==='dark'?'#ffffff':'#666',
-          display:"flex", alignItems:"center", justifyContent:"center",
+          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
         }}>{theme === 'dark' ? '☀' : '🌙'}</button>
       </div>
 
