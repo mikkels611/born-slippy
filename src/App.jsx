@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { STEPS, WHOLE_TONE_DOWN, MINOR_THIRD_UP, RND_COLORS, getStepTime } from "./data/constants";
 import { generateRandomPattern } from "./data/patterns";
-import { THEME_PACKAGES, BORN_SLIPPY, getPackageById } from "./data/themePackages";
+import { THEME_PACKAGES, getPackageById } from "./data/themePackages";
 import { persistSlots, loadSlotsAsync, exportSession, importSession } from "./data/sessionStore";
 import { createDistortionCurve } from "./audio/utils";
 import { loadDraft, createDraft, saveDraft, clearDraft, captureToDraft, updatePatternMeta, updateDraftMeta, updatePatternColor, addSet, deleteSet, switchSet, getDraftPatterns, getDraftColors, exportDraftAsJson, importDraftFromJson } from "./data/draftPackageStore";
@@ -22,7 +22,7 @@ export default function App() {
 
   const [activePackage, setActivePackage] = useState(() => {
     const saved = localStorage.getItem('born-slippy-package');
-    return saved ? (getPackageById(saved) || BORN_SLIPPY) : BORN_SLIPPY;
+    return saved ? (getPackageById(saved) || THEME_PACKAGES[0]) : THEME_PACKAGES[0];
   });
   const bpm = draft ? draft.bpm : activePackage.bpm;
   const stepTime = useMemo(() => getStepTime(bpm), [bpm]);
