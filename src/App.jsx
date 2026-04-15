@@ -827,7 +827,7 @@ export default function App() {
         }}><span style={{fontSize:11}}>↑</span><span>III</span></button>}
       </div>
 
-      <div style={{ display:"flex", alignItems:"center", gap:12, width:"100%", maxWidth:380 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, width:"100%", maxWidth:380, position:"relative" }}>
         <button onClick={handlePlayPause} style={{
           ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
           background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
@@ -845,14 +845,13 @@ export default function App() {
           userSelect:"none", WebkitUserSelect:"none", flexShrink:0,
         }}>■</button>
 
-        <div style={{flex:1}} />
-
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
           ...btn, width:44, height:44, borderRadius:10, fontSize:18,
           background:theme==='dark'?'#161616':'#e0e0e0',
           border:`2px solid ${theme==='dark'?'#444':'#ccc'}`,
           color:theme==='dark'?'#ffffff':'#666',
-          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          position:"absolute", right:0,
         }}>{theme === 'dark' ? '☀' : '🌙'}</button>
       </div>
 
