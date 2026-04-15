@@ -1,6 +1,6 @@
 import { useRef, useCallback, memo } from "react";
 
-export default memo(function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020", muted, onMute, solo, onSolo, soloActive, rec, onRec, isDark=true }) {
+export default memo(function VerticalSlider({ label, value, onChange, min=0, max=1, color="#e05020", muted, onMute, solo, onSolo, soloActive, rec, onRec, isDark=true, log=false }) {
   const trackRef = useRef(null);
   const fillRef = useRef(null);
   const knobRef = useRef(null);
@@ -8,7 +8,7 @@ export default memo(function VerticalSlider({ label, value, onChange, min=0, max
   const dragging = useRef(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const norm = (value-min)/(max-min);
+  const norm = log && min > 0 ? Math.log(value/min)/Math.log(max/min) : (value-min)/(max-min);
   const dc = muted ? "#444" : color;
 
   const applyVisual = useCallback((clientY) => {
@@ -17,8 +17,8 @@ export default memo(function VerticalSlider({ label, value, onChange, min=0, max
     const n = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     if (fillRef.current) fillRef.current.style.height = `${n * 100}%`;
     if (knobRef.current) knobRef.current.style.bottom = `calc(${n * 100}% - 12px)`;
-    return min + n * (max - min);
-  }, [min, max]);
+    return log && min > 0 ? min * Math.pow(max/min, n) : min + n * (max - min);
+  }, [min, max, log]);
 
   const onTouchStart = useCallback((e) => {
     e.preventDefault();
