@@ -772,7 +772,7 @@ export default function App() {
       <div style={{ display:"flex", gap:5, width:"100%", maxWidth:380 }}>
         {effectivePatterns.map((pat,idx)=>{
           const isA=activePattern===idx&&!isRandom;const isQ=selectedPattern===idx&&!isA&&playing&&!isRandom;const pc=effectiveColors[idx];
-          return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"9px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, background:isA?pc:isQ?(theme === 'dark' ? `${pc}22` : `${pc}18`):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?`2px solid ${pc}`:isA?`2px solid ${pc}`:`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#fff":isQ?pc:(theme === 'dark' ? "#666" : "#222") }}>
+          return(<button key={idx} onClick={()=>selectFixed(idx)} style={{ ...btn, flex:1, padding:"12px 2px", borderRadius:7, fontSize:9, letterSpacing:1.5, minHeight:48, background:isA?pc:isQ?(theme === 'dark' ? `${pc}22` : `${pc}18`):(theme === 'dark' ? "#161616" : "#dedede"), border:isQ?`2px solid ${pc}`:isA?`2px solid ${pc}`:`2px solid ${theme === 'dark' ? "#2a2a2a" : "#bbb"}`, color:isA?"#fff":isQ?pc:(theme === 'dark' ? "#666" : "#222"), display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
             {adminMode && draft && editingPatternName===idx ? (
               <input
                 autoFocus
@@ -783,8 +783,9 @@ export default function App() {
                 style={{ width:"100%", background:"transparent", border:"none", color:"inherit", fontSize:9, fontWeight:700, letterSpacing:1.5, textAlign:"center", fontFamily:"'Space Mono',monospace", textTransform:"uppercase", outline:"none", padding:0 }}
               />
             ) : (
-              <span onDoubleClick={adminMode&&draft?(e)=>{e.stopPropagation();setEditingPatternName(idx);}:undefined}>
-                {pat.name}{isQ&&<div style={{fontSize:6,marginTop:1,opacity:0.8}}>NEXT</div>}
+              <span onDoubleClick={adminMode&&draft?(e)=>{e.stopPropagation();setEditingPatternName(idx);}:undefined} style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+                <span>{pat.name}</span>
+                <span style={{fontSize:6,marginTop:1,opacity:isQ?0.8:0,height:8}}>{isQ?"NEXT":""}</span>
               </span>
             )}
           </button>);
@@ -829,11 +830,11 @@ export default function App() {
         <button onClick={handlePlayPause} style={{
           ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
           background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
-          border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#0d0d0d":"#888",
+          border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#000":"#888",
           boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center",
           userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
-        }}>{playing?"⏸":"▶"}</button>
+        }}>{playing ? <span style={{display:"flex",gap:4}}><span style={{width:5,height:18,background:"#000",borderRadius:1}}/><span style={{width:5,height:18,background:"#000",borderRadius:1}}/></span> : "▶"}</button>
 
         {advanced && <button onClick={toggleThirdUp} style={{
           ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
