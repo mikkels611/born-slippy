@@ -148,18 +148,29 @@ export default function App() {
     }
   }, []);
 
-  const initAudio = useCallback(() => {
+  const initAudio = useCallback(async () => {
     if(ctxRef.current) return ctxRef.current;
-    // iOS silent switch workaround: play a tiny silent audio element to switch
-    // the audio session from "ambient" (muted by silent switch) to "playback"
+    // iOS silent switch workaround: play a proper silent WAV via <audio> element
+    // to switch the audio session from "ambient" (muted by silent switch) to "playback".
+    // Must complete BEFORE creating AudioContext so the context inherits "playback" mode.
     try {
-      const silence = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
-      silence.playsInline = true;
-      silence.play().catch(()=>{});
+      const sr=8000,ns=800,ds=ns*2,h=44;
+      const buf=new ArrayBuffer(h+ds),v=new DataView(buf);
+      const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+      w(0,'RIFF');v.setUint32(4,36+ds,true);w(8,'WAVE');
+      w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+      v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);
+      v.setUint16(32,2,true);v.setUint16(34,16,true);
+      w(36,'data');v.setUint32(40,ds,true);
+      // samples are zero (silence) by default in ArrayBuffer
+      const blob=new Blob([buf],{type:'audio/wav'});
+      const url=URL.createObjectURL(blob);
+      const silence=new Audio(url);
+      await silence.play();
+      URL.revokeObjectURL(url);
     } catch(e) {}
     const ctx=new(window.AudioContext||window.webkitAudioContext)(); ctxRef.current=ctx;
-    // Resume context if suspended (iOS requires user gesture)
-    if(ctx.state==='suspended') ctx.resume();
+    if(ctx.state==='suspended') await ctx.resume();
     const master=ctx.createGain();master.gain.value=0.85;
     const comp=ctx.createDynamicsCompressor();comp.threshold.value=-12;comp.ratio.value=4;comp.attack.value=0.003;comp.release.value=0.15;
     master.connect(comp);comp.connect(ctx.destination);
@@ -359,7 +370,7 @@ export default function App() {
   },[playBass,playKick,playHat,playClap]);
 
   const startSeq=useCallback(async ()=>{
-    const ctx=initAudio();
+    const ctx=await initAudio();
     if(ctx.state==="suspended"||ctx.state==="interrupted") await ctx.resume();
     stepRef.current=0; pendingPatternRef.current=null; pendingPatternsRef.current=null;
     seqBarCountRef.current=0;
