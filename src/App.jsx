@@ -90,6 +90,8 @@ export default function App() {
   const [seqBars, setSeqBars] = useState(()=>parseInt(localStorage.getItem('born-slippy-seqbars'))||4);
   const [seqCurrentSlot, setSeqCurrentSlot] = useState(-1);
   const [seqPendingSlot, setSeqPendingSlot] = useState(-1);
+  const [advanced, setAdvanced] = useState(()=>localStorage.getItem('born-slippy-advanced')==='true');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const ctxRef=useRef(null); const timerRef=useRef(null); const stepRef=useRef(0);
   const nodesRef=useRef({}); const activePatternRef=useRef(0);
@@ -106,7 +108,6 @@ export default function App() {
   const fadeStepsRef=useRef(16);
   const fadeCurrentStepRef=useRef(0);
   const fadeTimerRef=useRef(null);
-  const playBtnTimerRef=useRef(null);
   const playingRef=useRef(false);
   const seqModeRef=useRef(false);
   const seqBarsRef=useRef(4);
@@ -571,6 +572,7 @@ export default function App() {
   useEffect(()=>{ localStorage.setItem('born-slippy-seqplay', seqPlay); },[seqPlay]);
   useEffect(()=>{ localStorage.setItem('born-slippy-seqbars', seqBars); },[seqBars]);
   useEffect(()=>{ localStorage.setItem('born-slippy-mutelock', muteLock); },[muteLock]);
+  useEffect(()=>{ localStorage.setItem('born-slippy-advanced', advanced); },[advanced]);
   useEffect(()=>{ loadSlotsAsync().then(slots=>{ if(slots) setSavedSlots(slots); }); },[]);
 
   const switchPackage = useCallback((pkg) => {
@@ -679,22 +681,14 @@ export default function App() {
     setSelectedPattern(0); setIsRandom(false);
   }, [draft]);
 
-  const handlePlayDown=useCallback(()=>{
-    playBtnTimerRef.current=setTimeout(()=>{
-      playBtnTimerRef.current="long";
-      if(playingRef.current){stopSeq(true);}else{seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);}
-    },1500);
-  },[stopSeq]);
-  const handlePlayUp=useCallback(()=>{
-    if(playBtnTimerRef.current==="long"){playBtnTimerRef.current=null;return;}
-    if(playBtnTimerRef.current){clearTimeout(playBtnTimerRef.current);}
-    playBtnTimerRef.current=null;
+  const handlePlayPause=useCallback(()=>{
     if(playingRef.current){stopSeq(false);}else{startSeq();}
   },[stopSeq,startSeq]);
-  const handlePlayCancel=useCallback(()=>{
-    if(playBtnTimerRef.current&&playBtnTimerRef.current!=="long")clearTimeout(playBtnTimerRef.current);
-    playBtnTimerRef.current=null;
-  },[]);
+  const handleStop=useCallback(()=>{
+    stopSeq(true);
+    seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);
+    activePatternRef.current=0;setActivePattern(0);setSelectedPattern(0);
+  },[stopSeq]);
 
   const btn={fontFamily:"'Space Mono', monospace",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"all 0.15s",fontWeight:700,textTransform:"uppercase",letterSpacing:1};
 
@@ -815,37 +809,43 @@ export default function App() {
       </div>
 
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <button onClick={toggleNoteDown} style={{
+        {advanced && <button onClick={toggleNoteDown} style={{
           ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
           background:noteDown?"#1a2a1a":(theme === 'dark' ? "#161616" : "#d9d9d9"),
           border:`2px solid ${noteDown?"#40a040":(theme === 'dark' ? "#2a2a2a" : "#999")}`,
           color:noteDown?"#40a040":(theme === 'dark' ? "#d9d9d9" : "#222"),
           display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
           boxShadow:noteDown?"0 0 10px rgba(64,160,64,0.2)":"none",
-        }}><span style={{fontSize:13}}>↓</span><span>NOTE</span></button>
+        }}><span style={{fontSize:13}}>↓</span><span>NOTE</span></button>}
 
-        <button
-          onMouseDown={handlePlayDown} onMouseUp={handlePlayUp} onMouseLeave={handlePlayCancel}
-          onTouchStart={(e)=>{e.preventDefault();handlePlayDown();}} onTouchEnd={(e)=>{e.preventDefault();handlePlayUp();}}
-          style={{ ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
-            background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
-            border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#0d0d0d":"#888",
-            boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
-          }}>{playing?"■":"▶"}</button>
+        <button onClick={handleStop} style={{
+          ...btn, width:44, height:44, borderRadius:"50%", fontSize:14,
+          background:theme === 'dark' ? "linear-gradient(145deg, #222, #1a1a1a)" : "linear-gradient(145deg, #ddd, #ccc)",
+          border:`2px solid ${theme === 'dark' ? "#444" : "#999"}`, color:theme === 'dark' ? "#888" : "#555",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          userSelect:"none", WebkitUserSelect:"none",
+        }}>■</button>
 
-        <button onClick={toggleThirdUp} style={{
+        <button onClick={handlePlayPause} style={{
+          ...btn, width:72, height:72, borderRadius:"50%", fontSize:24,
+          background:playing?"linear-gradient(145deg, #e05020, #c04018)":"linear-gradient(145deg, #222, #1a1a1a)",
+          border:`3px solid ${playing?"#e05020":"#444"}`, color:playing?"#0d0d0d":"#888",
+          boxShadow:playing?"0 0 28px rgba(224,80,32,0.4)":"0 4px 10px rgba(0,0,0,0.6)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none",
+        }}>{playing?"⏸":"▶"}</button>
+
+        {advanced && <button onClick={toggleThirdUp} style={{
           ...btn, width:50, height:50, borderRadius:10, fontSize:9, letterSpacing:0.5,
           background:thirdUp?"#1a1a2a":(theme === 'dark' ? "#161616" : "#d9d9d9"),
           border:`2px solid ${thirdUp?"#4080e0":(theme === 'dark' ? "#2a2a2a" : "#999")}`,
           color:thirdUp?"#4080e0":(theme === 'dark' ? "#d9d9d9" : "#222"),
           display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
           boxShadow:thirdUp?"0 0 10px rgba(64,128,224,0.2)":"none",
-        }}><span style={{fontSize:13}}>↑</span><span>III</span></button>
+        }}><span style={{fontSize:13}}>↑</span><span>III</span></button>}
 
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
-          ...btn, width:50, height:50, borderRadius:10, fontSize:20,
+          ...btn, width:44, height:44, borderRadius:10, fontSize:18,
           background:theme==='dark'?'#161616':'#e0e0e0',
           border:`2px solid ${theme==='dark'?'#444':'#ccc'}`,
           color:theme==='dark'?'#ffffff':'#666',
@@ -894,68 +894,90 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
-          EXPERIMENTAL: PRESET FADE
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
-            <input type="checkbox" checked={fadeMode} onChange={(e) => setFadeMode(e.target.checked)} style={{ marginRight:4 }} />
-            Enable Fade
-          </label>
-          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
-            Steps: <input type="number" min="1" max="64" value={fadeSteps} onChange={(e) => setFadeSteps(parseInt(e.target.value) || 16)} style={{ width:50, background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:2, borderRadius:3 }} />
-          </label>
-        </div>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
-          Fade time: {(fadeSteps * stepTime * 1000).toFixed(0)}ms ({fadeSteps} steps)
-        </div>
-      </div>
+      <div style={{ width:"100%", maxWidth:380 }}>
+        <button onClick={()=>setSettingsOpen(v=>!v)} style={{ ...btn, width:"100%", padding:"10px 8px", borderRadius:10, fontSize:8, letterSpacing:2, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, color:theme === 'dark' ? "#666" : "#555" }}>
+          {settingsOpen?"▼":"▶"} SETTINGS
+        </button>
+        {settingsOpen && (
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginTop:8 }}>
 
-      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
-          EXPERIMENTAL: SEQUENCE PLAY
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
-            <input type="checkbox" checked={seqPlay} onChange={(e) => setSeqPlay(e.target.checked)} style={{ marginRight:4 }} />
-            Play patterns in sequence
-          </label>
-          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
-            Bars: <input type="number" min="1" max="64" value={seqBars} onChange={(e) => setSeqBars(parseInt(e.target.value) || 4)} style={{ width:44, background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:2, borderRadius:3 }} />
-          </label>
-        </div>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
-          {seqPlay ? `Each pattern plays ${seqBars} bar${seqBars>1?"s":""} • TAP pattern to queue next • TAP STOP = pause • HOLD STOP = reset` : "Enable to auto-advance through filled patterns"}
-        </div>
-      </div>
+            {/* Advanced features */}
+            <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+              <div style={{ display:"flex", justifyContent:"center", alignItems:"center" }}>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} style={{ marginRight:4 }} />
+                  Advanced features (pitch shift buttons)
+                </label>
+              </div>
+            </div>
 
-      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
-          EXPERIMENTAL: MUTE LOCK
-        </div>
-        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", marginBottom:6 }}>
-          <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
-            <input type="checkbox" checked={muteLock} onChange={(e) => setMuteLock(e.target.checked)} style={{ marginRight:4 }} />
-            Lock muted channels on Random
-          </label>
-        </div>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
-          {muteLock ? "Muted channels keep current pattern when generating Random" : "All channels randomised regardless of mute state"}
-        </div>
-      </div>
+            {/* Preset Fade */}
+            <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>PRESET FADE</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={fadeMode} onChange={(e) => setFadeMode(e.target.checked)} style={{ marginRight:4 }} />
+                  Enable Fade
+                </label>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  Steps: <input type="number" min="1" max="64" value={fadeSteps} onChange={(e) => setFadeSteps(parseInt(e.target.value) || 16)} style={{ width:50, background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:2, borderRadius:3 }} />
+                </label>
+              </div>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
+                Fade time: {(fadeSteps * stepTime * 1000).toFixed(0)}ms ({fadeSteps} steps)
+              </div>
+            </div>
 
-      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
-          MIDI OUTPUT
-        </div>
-        <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
-          <option value=''>No MIDI Output</option>
-          {midiOutputs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
-          Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
-        </div>
+            {/* Sequence Play */}
+            <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>SEQUENCE PLAY</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={seqPlay} onChange={(e) => setSeqPlay(e.target.checked)} style={{ marginRight:4 }} />
+                  Play patterns in sequence
+                </label>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  Bars: <input type="number" min="1" max="64" value={seqBars} onChange={(e) => setSeqBars(parseInt(e.target.value) || 4)} style={{ width:44, background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:2, borderRadius:3 }} />
+                </label>
+              </div>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
+                {seqPlay ? `Each pattern plays ${seqBars} bar${seqBars>1?"s":""} • TAP slot to queue next` : "Enable to auto-advance through filled patterns"}
+              </div>
+            </div>
+
+            {/* Mute Lock */}
+            <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>MUTE LOCK</div>
+              <div style={{ display:"flex", justifyContent:"center", alignItems:"center", marginBottom:6 }}>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={muteLock} onChange={(e) => setMuteLock(e.target.checked)} style={{ marginRight:4 }} />
+                  Lock muted channels on Random
+                </label>
+              </div>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center" }}>
+                {muteLock ? "Muted channels keep current pattern when generating Random" : "All channels randomised regardless of mute state"}
+              </div>
+            </div>
+
+            {/* Experimental label */}
+            <div style={{ fontSize:8, color:theme === 'dark' ? "#555" : "#888", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginTop:2 }}>
+              EXPERIMENTAL
+            </div>
+
+            {/* MIDI Output */}
+            <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>MIDI OUTPUT</div>
+              <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
+                <option value=''>No MIDI Output</option>
+                {midiOutputs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
+                Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
+              </div>
+            </div>
+
+          </div>
+        )}
       </div>
 
       {/* ADMIN: Metadata editor */}
