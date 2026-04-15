@@ -113,6 +113,7 @@ export default function App() {
   const seqCurrentSlotRef=useRef(-1);
   const seqBarCountRef=useRef(0);
   const seqPendingSlotRef=useRef(null);
+  const seqPendingUIRef=useRef(null);
   const savedSlotsRef=useRef(Array(24).fill(null));
   const restoreSnapshotRef=useRef(null);
   const importFileRef=useRef(null);
@@ -326,6 +327,16 @@ export default function App() {
     if(s===0){
       if(pendingPatternRef.current!==null){activePatternRef.current=pendingPatternRef.current;pendingPatternRef.current=null;const p=activePatternRef.current;setTimeout(()=>setActivePattern(p),0);}
       if(pendingPatternsRef.current!==null){patternsRef.current=pendingPatternsRef.current;const pp=pendingPatternsRef.current;pendingPatternsRef.current=null;setTimeout(()=>setPatterns(pp),0);}
+      // Apply deferred seq slot UI update now that the audio has actually switched
+      if(seqPendingUIRef.current!==null){
+        const {idx,slot}=seqPendingUIRef.current;
+        seqPendingUIRef.current=null;
+        setTimeout(()=>{
+          if(!playingRef.current) return;
+          setSeqCurrentSlot(idx); setActiveSlot(idx);
+          if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
+        },0);
+      }
       if(seqModeRef.current){
         seqBarCountRef.current++;
         const pendingSlot=seqPendingSlotRef.current;
@@ -353,11 +364,8 @@ export default function App() {
             const arr=slot.fixedIndex>=0?pkgPats:[...pkgPats,slot];
             const patIdx=slot.fixedIndex>=0?slot.fixedIndex:4;
             pendingPatternsRef.current=arr; pendingPatternRef.current=patIdx;
-            setTimeout(()=>{
-              if(!playingRef.current) return;
-              setSeqCurrentSlot(nextIdx); setActiveSlot(nextIdx);
-              if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
-            },0);
+            // Defer UI update until the pending pattern is consumed (next s===0)
+            seqPendingUIRef.current={idx:nextIdx,slot};
           }
         }
       }
