@@ -150,11 +150,11 @@ export default function App() {
 
   const initAudio = useCallback(async () => {
     if(ctxRef.current) return ctxRef.current;
-    // iOS silent switch workaround: play a proper silent WAV via <audio> element
-    // to switch the audio session from "ambient" (muted by silent switch) to "playback".
-    // Must complete BEFORE creating AudioContext so the context inherits "playback" mode.
+    // iOS silent switch workaround: loop a silent WAV via <audio> element to keep
+    // the audio session in "playback" mode (ignores silent switch) for the entire session.
+    // The looping element must stay alive — if it stops, iOS reverts to "ambient" mode.
     try {
-      const sr=8000,ns=800,ds=ns*2,h=44;
+      const sr=8000,dur=1,ns=sr*dur,ds=ns*2,h=44;
       const buf=new ArrayBuffer(h+ds),v=new DataView(buf);
       const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
       w(0,'RIFF');v.setUint32(4,36+ds,true);w(8,'WAVE');
@@ -162,12 +162,11 @@ export default function App() {
       v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);
       v.setUint16(32,2,true);v.setUint16(34,16,true);
       w(36,'data');v.setUint32(40,ds,true);
-      // samples are zero (silence) by default in ArrayBuffer
       const blob=new Blob([buf],{type:'audio/wav'});
       const url=URL.createObjectURL(blob);
       const silence=new Audio(url);
+      silence.loop=true;
       await silence.play();
-      URL.revokeObjectURL(url);
     } catch(e) {}
     const ctx=new(window.AudioContext||window.webkitAudioContext)(); ctxRef.current=ctx;
     if(ctx.state==='suspended') await ctx.resume();
