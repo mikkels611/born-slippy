@@ -740,7 +740,7 @@ export default function App() {
         }}
       >
         {THEME_PACKAGES.map((pkg) => (
-          <option key={pkg.id} value={pkg.id}>
+          <option key={pkg.id} value={pkg.id} style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>
             {pkg.name} — {pkg.bpm} BPM • {pkg.key}
           </option>
         ))}
@@ -970,8 +970,8 @@ export default function App() {
             <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
               <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>MIDI OUTPUT</div>
               <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
-                <option value=''>No MIDI Output</option>
-                {midiOutputs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                <option value='' style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>No MIDI Output</option>
+                {midiOutputs.map(o => <option key={o.id} value={o.id} style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>{o.name}</option>)}
               </select>
               <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
                 Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
