@@ -150,7 +150,16 @@ export default function App() {
 
   const initAudio = useCallback(() => {
     if(ctxRef.current) return ctxRef.current;
+    // iOS silent switch workaround: play a tiny silent audio element to switch
+    // the audio session from "ambient" (muted by silent switch) to "playback"
+    try {
+      const silence = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+      silence.playsInline = true;
+      silence.play().catch(()=>{});
+    } catch(e) {}
     const ctx=new(window.AudioContext||window.webkitAudioContext)(); ctxRef.current=ctx;
+    // Resume context if suspended (iOS requires user gesture)
+    if(ctx.state==='suspended') ctx.resume();
     const master=ctx.createGain();master.gain.value=0.85;
     const comp=ctx.createDynamicsCompressor();comp.threshold.value=-12;comp.ratio.value=4;comp.attack.value=0.003;comp.release.value=0.15;
     master.connect(comp);comp.connect(ctx.destination);
