@@ -108,6 +108,8 @@ export default function App() {
   const fadeStepsRef=useRef(16);
   const fadeCurrentStepRef=useRef(0);
   const fadeTimerRef=useRef(null);
+  const fadeModeRef=useRef(true);
+  const startFadeRef=useRef(null);
   const playingRef=useRef(false);
   const seqModeRef=useRef(false);
   const seqBarsRef=useRef(4);
@@ -131,6 +133,7 @@ export default function App() {
   },[bassMute,kickMute,hatMute,clapMute,bassSolo,kickSolo,hatSolo,clapSolo,anySolo]);
   useEffect(()=>{ clapVolRef.current=clapVol; },[clapVol]);
   useEffect(() => { fadeStepsRef.current = fadeSteps; }, [fadeSteps]);
+  useEffect(()=>{ fadeModeRef.current=fadeMode; },[fadeMode]);
   useEffect(()=>{ seqModeRef.current=seqPlay; },[seqPlay]);
   useEffect(()=>{ seqBarsRef.current=seqBars; },[seqBars]);
   useEffect(()=>{ seqCurrentSlotRef.current=seqCurrentSlot; },[seqCurrentSlot]);
@@ -257,6 +260,7 @@ export default function App() {
     }, stepTimeRef.current * 1000);
     fadeTimerRef.current = timer;
   }, [getChannelSnapshot, restoreChannelSnapshot, fadeSteps]);
+  useEffect(()=>{ startFadeRef.current=startFade; },[startFade]);
 
   const playBass=useCallback((ctx,time,freq,accent)=>{
     if(freq===0||mutesRef.current.bass)return;const f=freq*getPitch();
@@ -335,7 +339,13 @@ export default function App() {
         setTimeout(()=>{
           if(!playingRef.current) return;
           setSeqCurrentSlot(idx); setActiveSlot(idx);
-          if(restoreSnapshotRef.current) restoreSnapshotRef.current(slot.channels);
+          if(fadeModeRef.current && startFadeRef.current) {
+            if(fadeActiveRef.current){
+              if(fadeTimerRef.current) clearInterval(fadeTimerRef.current);
+              fadeActiveRef.current=false; fadeTargetRef.current=null; fadeStartValuesRef.current=null; fadeTimerRef.current=null;
+            }
+            startFadeRef.current(slot.channels);
+          } else if(restoreSnapshotRef.current) { restoreSnapshotRef.current(slot.channels); }
         },0);
       }
       if(seqModeRef.current){
