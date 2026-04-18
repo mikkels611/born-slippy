@@ -204,11 +204,16 @@ export default function App() {
 
   const getPitch=useCallback(()=>{let m=1;if(pitchRef.current.noteDown)m*=WHOLE_TONE_DOWN;if(pitchRef.current.thirdUp)m*=MINOR_THIRD_UP;return m;},[]);
 
-  const sendMidiNote = useCallback((channel, note, velocity) => {
+  const sendMidiNote = useCallback((channel, note, velocity, time) => {
     if (!selectedMidiOutput) return;
     const vel = Math.floor(velocity * 127);
-    selectedMidiOutput.send([0x90 + channel - 1, note, vel]);
-    setTimeout(() => selectedMidiOutput.send([0x80 + channel - 1, note, 0]), 100);
+    const ctx = ctxRef.current;
+    const delay = ctx ? Math.max(0, (time - ctx.currentTime) * 1000) : 0;
+    const send = () => {
+      selectedMidiOutput.send([0x90 + channel - 1, note, vel]);
+      setTimeout(() => selectedMidiOutput.send([0x80 + channel - 1, note, 0]), 100);
+    };
+    if (delay > 5) { setTimeout(send, delay); } else { send(); }
   }, [selectedMidiOutput]);
 
   const getChannelSnapshot = useCallback(() => ({
@@ -271,7 +276,7 @@ export default function App() {
 
   const playBass=useCallback((ctx,time,freq,accent)=>{
     if(freq===0||mutesRef.current.bass)return;const f=freq*getPitch();
-    sendMidiNote(midiChannels.bass, Math.round(12 * Math.log2(freq * getPitch() / 440) + 69), accent);
+    sendMidiNote(midiChannels.bass, Math.round(12 * Math.log2(freq * getPitch() / 440) + 69), accent, time);
     const sp=activePackageRef.current.synthParams;
     const st=stepTimeRef.current;
 
@@ -302,7 +307,7 @@ export default function App() {
 
   const playKick=useCallback((ctx,time,vel)=>{
     if(mutesRef.current.kick)return;
-    sendMidiNote(midiChannels.kick, 36, vel);
+    sendMidiNote(midiChannels.kick, 36, vel, time);
     const o=ctx.createOscillator(),env=ctx.createGain();
     o.type="sine";o.frequency.setValueAtTime(150,time);o.frequency.exponentialRampToValueAtTime(42,time+0.07);
     env.gain.setValueAtTime(vel*0.9,time);env.gain.exponentialRampToValueAtTime(0.001,time+0.35);
@@ -315,7 +320,7 @@ export default function App() {
   const playHat=useCallback((ctx,time,vel,open)=>{
     if(mutesRef.current.hat)return;
     const note = open ? 46 : 42;
-    sendMidiNote(midiChannels.hats, note, vel);
+    sendMidiNote(midiChannels.hats, note, vel, time);
     const sz=ctx.sampleRate*(open?0.15:0.04);
     const buf=ctx.createBuffer(1,sz,ctx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<sz;i++)d[i]=Math.random()*2-1;
     const src=ctx.createBufferSource();src.buffer=buf;const bp=ctx.createBiquadFilter();bp.type="bandpass";bp.frequency.value=open?8000:10000;bp.Q.value=open?1.5:2;
@@ -325,7 +330,7 @@ export default function App() {
 
   const playClap=useCallback((ctx,time,vel)=>{
     if(mutesRef.current.clap)return;
-    sendMidiNote(midiChannels.clap, 39, vel || 1);
+    sendMidiNote(midiChannels.clap, 39, vel || 1, time);
     const vol=clapVolRef.current*(vel||1);
     for(let j=0;j<3;j++){const t=time+j*0.008;const sz=ctx.sampleRate*0.02;const buf=ctx.createBuffer(1,sz,ctx.sampleRate);const d=buf.getChannelData(0);
     for(let i=0;i<sz;i++)d[i]=Math.random()*2-1;const src=ctx.createBufferSource();src.buffer=buf;
