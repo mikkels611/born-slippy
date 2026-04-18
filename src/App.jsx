@@ -144,11 +144,18 @@ export default function App() {
 
   useEffect(() => {
     if (navigator.requestMIDIAccess) {
-      navigator.requestMIDIAccess().then(access => {
+      navigator.requestMIDIAccess({ sysex: false }).then(access => {
         setMidiAccess(access);
-        const outputs = Array.from(access.outputs.values());
-        setMidiOutputs(outputs);
-        if (outputs.length > 0) setSelectedMidiOutput(outputs[0]);
+        const refreshOutputs = () => {
+          const outputs = Array.from(access.outputs.values());
+          setMidiOutputs(outputs);
+          setSelectedMidiOutput(prev => {
+            if (prev && outputs.some(o => o.id === prev.id)) return prev;
+            return outputs.length > 0 ? outputs[0] : null;
+          });
+        };
+        refreshOutputs();
+        access.onstatechange = () => refreshOutputs();
       }).catch(err => console.log('MIDI access denied', err));
     }
   }, []);
