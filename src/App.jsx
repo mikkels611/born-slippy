@@ -83,6 +83,7 @@ export default function App() {
   const [midiAccess, setMidiAccess] = useState(null);
   const [midiOutputs, setMidiOutputs] = useState([]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
+  const selectedMidiOutputRef = useRef(null);
   const midiChannels = { bass: 1, kick: 2, hats: 3, clap: 4 };
   const [fadeMode, setFadeMode] = useState(() => localStorage.getItem('born-slippy-fade') !== 'false');
   const [fadeSteps, setFadeSteps] = useState(16);
@@ -204,17 +205,22 @@ export default function App() {
 
   const getPitch=useCallback(()=>{let m=1;if(pitchRef.current.noteDown)m*=WHOLE_TONE_DOWN;if(pitchRef.current.thirdUp)m*=MINOR_THIRD_UP;return m;},[]);
 
+  useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
+
   const sendMidiNote = useCallback((channel, note, velocity, time) => {
-    if (!selectedMidiOutput) return;
+    const output = selectedMidiOutputRef.current;
+    if (!output) return;
     const vel = Math.floor(velocity * 127);
     const ctx = ctxRef.current;
     const delay = ctx ? Math.max(0, (time - ctx.currentTime) * 1000) : 0;
     const send = () => {
-      selectedMidiOutput.send([0x90 + channel - 1, note, vel]);
-      setTimeout(() => selectedMidiOutput.send([0x80 + channel - 1, note, 0]), 100);
+      const out = selectedMidiOutputRef.current;
+      if (!out) return;
+      out.send([0x90 + channel - 1, note, vel]);
+      setTimeout(() => { const o = selectedMidiOutputRef.current; if (o) o.send([0x80 + channel - 1, note, 0]); }, 100);
     };
     if (delay > 5) { setTimeout(send, delay); } else { send(); }
-  }, [selectedMidiOutput]);
+  }, []);
 
   const getChannelSnapshot = useCallback(() => ({
     bassVol, kickVol, hatVol, clapVol, filterCut, delayMix, drive,
