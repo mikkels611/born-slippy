@@ -90,6 +90,11 @@ export default function App() {
   const [midiLog, setMidiLog] = useState(false);
   const midiLogRef = useRef(false);
   const [midiLogEntries, setMidiLogEntries] = useState([]);
+  const [midiClockStartStop, setMidiClockStartStop] = useState(false);
+  const midiClockStartStopRef = useRef(false);
+  const [midiClockSync, setMidiClockSync] = useState(false);
+  const midiClockSyncRef = useRef(false);
+  const midiClockTimerRef = useRef(null);
   const [fadeMode, setFadeMode] = useState(() => localStorage.getItem('born-slippy-fade') !== 'false');
   const [fadeSteps, setFadeSteps] = useState(16);
   const [seqPlay, setSeqPlay] = useState(()=>localStorage.getItem('born-slippy-seqplay')==='true');
@@ -149,6 +154,8 @@ export default function App() {
   useEffect(()=>{ activePackageRef.current=activePackage; },[activePackage]);
   useEffect(()=>{ muteAudioRef.current=muteAudio; },[muteAudio]);
   useEffect(()=>{ midiLogRef.current=midiLog; },[midiLog]);
+  useEffect(()=>{ midiClockStartStopRef.current=midiClockStartStop; },[midiClockStartStop]);
+  useEffect(()=>{ midiClockSyncRef.current=midiClockSync; },[midiClockSync]);
 
   useEffect(() => {
     if (navigator.requestMIDIAccess) {
@@ -233,6 +240,33 @@ export default function App() {
     };
     if (delay > 5) { setTimeout(send, delay); } else { send(); }
   }, []);
+
+  const logMidiMsg = useCallback((msg) => {
+    if (!midiLogRef.current) return;
+    const ts = new Date().toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+    setMidiLogEntries(prev => [...prev, `${ts}  ${msg}`]);
+  }, []);
+
+  const startMidiClock = useCallback(() => {
+    const out = selectedMidiOutputRef.current;
+    if (!out) return;
+    if (midiClockStartStopRef.current) { out.send([0xFA]); logMidiMsg('Start (0xFA)'); }
+    if (midiClockTimerRef.current) clearInterval(midiClockTimerRef.current);
+    if (midiClockSyncRef.current) {
+      // 24 PPQN: one sixteenth note = 6 clock pulses
+      const ppqnInterval = stepTimeRef.current * 1000 / 6;
+      midiClockTimerRef.current = setInterval(() => {
+        const o = selectedMidiOutputRef.current;
+        if (o && midiClockSyncRef.current) o.send([0xF8]);
+      }, ppqnInterval);
+    }
+  }, [logMidiMsg]);
+
+  const stopMidiClock = useCallback(() => {
+    if (midiClockTimerRef.current) { clearInterval(midiClockTimerRef.current); midiClockTimerRef.current = null; }
+    const out = selectedMidiOutputRef.current;
+    if (out && midiClockStartStopRef.current) { out.send([0xFC]); logMidiMsg('Stop (0xFC)'); }
+  }, [logMidiMsg]);
 
   const getChannelSnapshot = useCallback(() => ({
     bassVol, kickVol, hatVol, clapVol, filterCut, delayMix, drive,
@@ -445,16 +479,18 @@ export default function App() {
     let nextTime=ctx.currentTime+0.05;
     const sched=()=>{while(nextTime<ctx.currentTime+0.2){scheduleStep(ctx,stepRef.current,nextTime);const s=stepRef.current%STEPS;setTimeout(()=>setCurrentStep(s),(nextTime-ctx.currentTime)*1000);nextTime+=stepTimeRef.current;stepRef.current++;}timerRef.current=setTimeout(sched,100);};
     playingRef.current=true;
+    startMidiClock();
     sched();setPlaying(true);
-  },[initAudio,scheduleStep,selectedPattern]);
+  },[initAudio,scheduleStep,selectedPattern,startMidiClock]);
 
   const stopSeq=useCallback((reset=false)=>{
     playingRef.current=false;
     if(timerRef.current)clearTimeout(timerRef.current);
+    stopMidiClock();
     setPlaying(false);setCurrentStep(-1);
     seqPendingSlotRef.current=null;setSeqPendingSlot(-1);
     if(reset){seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);}
-  },[]);
+  },[stopMidiClock]);
 
   const loadPats=useCallback((arr,idx)=>{
     if(playing){pendingPatternsRef.current=arr;pendingPatternRef.current=idx;}
@@ -1024,6 +1060,14 @@ export default function App() {
                 <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
                   <input type="checkbox" checked={muteAudio} onChange={(e) => setMuteAudio(e.target.checked)} style={{ marginRight:4 }} />
                   MIDI only (mute audio)
+                </label>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={midiClockStartStop} onChange={(e) => setMidiClockStartStop(e.target.checked)} style={{ marginRight:4 }} />
+                  Send MIDI Start/Stop
+                </label>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={midiClockSync} onChange={(e) => setMidiClockSync(e.target.checked)} style={{ marginRight:4 }} />
+                  Send MIDI Clock sync
                 </label>
                 <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
                   <input type="checkbox" checked={midiLog} onChange={(e) => { setMidiLog(e.target.checked); if (!e.target.checked) setMidiLogEntries([]); }} style={{ marginRight:4 }} />
