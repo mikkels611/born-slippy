@@ -85,6 +85,11 @@ export default function App() {
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
   const selectedMidiOutputRef = useRef(null);
   const midiChannels = { bass: 1, kick: 2, hats: 3, clap: 4 };
+  const [muteAudio, setMuteAudio] = useState(false);
+  const muteAudioRef = useRef(false);
+  const [midiLog, setMidiLog] = useState(false);
+  const midiLogRef = useRef(false);
+  const [midiLogEntries, setMidiLogEntries] = useState([]);
   const [fadeMode, setFadeMode] = useState(() => localStorage.getItem('born-slippy-fade') !== 'false');
   const [fadeSteps, setFadeSteps] = useState(16);
   const [seqPlay, setSeqPlay] = useState(()=>localStorage.getItem('born-slippy-seqplay')==='true');
@@ -142,6 +147,8 @@ export default function App() {
   useEffect(()=>{ savedSlotsRef.current=savedSlots; },[savedSlots]);
   useEffect(()=>{ stepTimeRef.current=stepTime; },[stepTime]);
   useEffect(()=>{ activePackageRef.current=activePackage; },[activePackage]);
+  useEffect(()=>{ muteAudioRef.current=muteAudio; },[muteAudio]);
+  useEffect(()=>{ midiLogRef.current=midiLog; },[midiLog]);
 
   useEffect(() => {
     if (navigator.requestMIDIAccess) {
@@ -207,6 +214,7 @@ export default function App() {
 
   useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
 
+  const channelNames = { 1:'Bass', 2:'Kick', 3:'Hats', 4:'Clap' };
   const sendMidiNote = useCallback((channel, note, velocity, time) => {
     const output = selectedMidiOutputRef.current;
     if (!output) return;
@@ -217,6 +225,10 @@ export default function App() {
       const out = selectedMidiOutputRef.current;
       if (!out) return;
       out.send([0x90 + channel - 1, note, vel]);
+      if (midiLogRef.current) {
+        const ts = new Date().toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+        setMidiLogEntries(prev => [...prev, `${ts}  NoteOn  ch${channel} (${channelNames[channel]||'?'})  note=${note}  vel=${vel}`]);
+      }
       setTimeout(() => { const o = selectedMidiOutputRef.current; if (o) o.send([0x80 + channel - 1, note, 0]); }, 100);
     };
     if (delay > 5) { setTimeout(send, delay); } else { send(); }
@@ -283,6 +295,7 @@ export default function App() {
   const playBass=useCallback((ctx,time,freq,accent)=>{
     if(freq===0||mutesRef.current.bass)return;const f=freq*getPitch();
     sendMidiNote(midiChannels.bass, Math.round(12 * Math.log2(freq * getPitch() / 440) + 69), accent, time);
+    if(muteAudioRef.current)return;
     const sp=activePackageRef.current.synthParams;
     const st=stepTimeRef.current;
 
@@ -314,6 +327,7 @@ export default function App() {
   const playKick=useCallback((ctx,time,vel)=>{
     if(mutesRef.current.kick)return;
     sendMidiNote(midiChannels.kick, 36, vel, time);
+    if(muteAudioRef.current)return;
     const o=ctx.createOscillator(),env=ctx.createGain();
     o.type="sine";o.frequency.setValueAtTime(150,time);o.frequency.exponentialRampToValueAtTime(42,time+0.07);
     env.gain.setValueAtTime(vel*0.9,time);env.gain.exponentialRampToValueAtTime(0.001,time+0.35);
@@ -327,6 +341,7 @@ export default function App() {
     if(mutesRef.current.hat)return;
     const note = open ? 46 : 42;
     sendMidiNote(midiChannels.hats, note, vel, time);
+    if(muteAudioRef.current)return;
     const sz=ctx.sampleRate*(open?0.15:0.04);
     const buf=ctx.createBuffer(1,sz,ctx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<sz;i++)d[i]=Math.random()*2-1;
     const src=ctx.createBufferSource();src.buffer=buf;const bp=ctx.createBiquadFilter();bp.type="bandpass";bp.frequency.value=open?8000:10000;bp.Q.value=open?1.5:2;
@@ -337,6 +352,7 @@ export default function App() {
   const playClap=useCallback((ctx,time,vel)=>{
     if(mutesRef.current.clap)return;
     sendMidiNote(midiChannels.clap, 39, vel || 1, time);
+    if(muteAudioRef.current)return;
     const vol=clapVolRef.current*(vel||1);
     for(let j=0;j<3;j++){const t=time+j*0.008;const sz=ctx.sampleRate*0.02;const buf=ctx.createBuffer(1,sz,ctx.sampleRate);const d=buf.getChannelData(0);
     for(let i=0;i<sz;i++)d[i]=Math.random()*2-1;const src=ctx.createBufferSource();src.buffer=buf;
@@ -1004,6 +1020,27 @@ export default function App() {
               <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
                 Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
               </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:8 }}>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={muteAudio} onChange={(e) => setMuteAudio(e.target.checked)} style={{ marginRight:4 }} />
+                  MIDI only (mute audio)
+                </label>
+                <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
+                  <input type="checkbox" checked={midiLog} onChange={(e) => { setMidiLog(e.target.checked); if (!e.target.checked) setMidiLogEntries([]); }} style={{ marginRight:4 }} />
+                  MIDI log
+                </label>
+              </div>
+              {midiLog && (
+                <div style={{ marginTop:6 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                    <span style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", letterSpacing:1 }}>LOG ({midiLogEntries.length})</span>
+                    <button onClick={() => setMidiLogEntries([])} style={{ fontSize:8, color:theme === 'dark' ? "#888" : "#555", background:theme === 'dark' ? "#1a1a1a" : "#ddd", border:`1px solid ${theme === 'dark' ? "#333" : "#bbb"}`, borderRadius:3, padding:"1px 6px", cursor:"pointer" }}>Clear</button>
+                  </div>
+                  <div style={{ maxHeight:120, overflowY:"auto", background:theme === 'dark' ? "#0a0a0a" : "#fff", border:`1px solid ${theme === 'dark' ? "#222" : "#ccc"}`, borderRadius:4, padding:4, fontFamily:"'Space Mono',monospace", fontSize:8, color:theme === 'dark' ? "#0f0" : "#060", lineHeight:1.6 }}>
+                    {midiLogEntries.length === 0 ? <div style={{ color:theme === 'dark' ? "#444" : "#aaa" }}>Waiting for MIDI messages...</div> : midiLogEntries.map((entry, i) => <div key={i}>{entry}</div>)}
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
