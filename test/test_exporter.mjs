@@ -29,11 +29,11 @@ const FIXED_PATTERNS = [
 const slots = new Array(24).fill(null);
 slots[0] = {
   fixedIndex: 0,
-  channels: { filterCut: 300, delayMix: 0.05 },
+  channels: { filterCut: 300, delayMix: 0.05, drive: 0.1, bassVol: 0.4, kickVol: 0.9, hatVol: 0.6, clapVol: 0.7 },
 };
 slots[1] = {
   fixedIndex: 0,
-  channels: { filterCut: 2500, delayMix: 0.75 },
+  channels: { filterCut: 2500, delayMix: 0.75, drive: 0.8, bassVol: 0.95, kickVol: 0.5, hatVol: 0.85, clapVol: 0.3, clapMute: true },
 };
 
 const bytes = exportSongToMidi({

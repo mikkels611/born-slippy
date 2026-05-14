@@ -2,11 +2,19 @@
 //
 // Hand-rolled Standard MIDI File (SMF type 1) writer. Walks the filled
 // slots in slot-machine order, lays each one out as `seqBars` bars of
-// notes on role-named tracks (drums / bass / pad / lead) plus CC
-// automation (filter cutoff on the bass track, master delay send on
-// the master track). When `fadeMode` is on, mixer/effect values lerp
-// across the slot boundary over `fadeSteps * STEP_TIME` so a CAT
-// consumer reads the transition as a CC ramp.
+// notes on role-named tracks (drums / bass / pad / lead) plus per-slot
+// CC automation so CAT can replay the song 1:1 with the in-browser
+// performance. Automation per track (CC numbers from
+// ~/cat-library/devices/digitone.toml):
+//   bass:   filter_frequency (CC 23, log-Hz)
+//           delay_send       (CC 13, 0..1)
+//           amp_drive        (CC 9,  0..1)
+//           amp_volume       (CC 7,  bassVol)
+//   drums:  amp_volume       (CC 7,  kickVol)
+//   pad:    amp_volume       (CC 7,  hatVol)
+//   lead:   amp_volume       (CC 7,  clapVol)
+// When `fadeMode` is on, values lerp across each slot boundary over
+// `fadeSteps * STEP_TIME` so CAT reads the transition as a CC ramp.
 //
 // Spec: /Users/mikkel/Code/cat/spec/openspec/specs/import-system/spec.md
 // § "Plugin import contract".
@@ -164,22 +172,46 @@ function buildMetaTrack(bpm) {
   ];
 }
 
-function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, kickPitch) {
-  // One note per non-zero step. velocity = round(stepValue * 127).
+// Plant either a single anchor CC at slotStartTicks, or — when fadeMode
+// is on and the value changed — a ramp from `prev` to `value` over the
+// `fadeSteps` 16th-notes preceding slotStartTicks. Mirrors how the
+// in-browser engine's `startFade()` lerps mixer/effect values across
+// the slot boundary. Returns the new prev value.
+function emitCCWithRamp(events, channel, controller, value, prev, slotStartTicks, fadeMode, fadeSteps) {
+  if (prev === null || !fadeMode || prev === value) {
+    events.push(cc(slotStartTicks, channel, controller, value));
+  } else {
+    const rampTicks = Math.round(fadeSteps * TICKS_PER_STEP);
+    const startRamp = Math.max(0, slotStartTicks - rampTicks);
+    rampCC(events, channel, controller, startRamp, slotStartTicks, prev, value, fadeSteps);
+  }
+  return value;
+}
+
+function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, drumPitch, patField, muteField, volField, fadeMode, fadeSteps) {
+  // One note per non-zero step at `drumPitch`. Velocity = stepValue * 127.
+  // AMP volume (CC 7) is anchored or ramped per slot from `volField` in the
+  // channel snapshot. `muteField` suppresses note triggers for that slot.
   const events = [trackName(0, name)];
   pushRoleInitCCs(events, channel);
   let barOffset = 0;
+  let prevVol = null;
   for (const slot of slots) {
     const pat = slotPattern(slot, fixedPatterns);
-    const muteFlag = pat.kick && slot.channels?.kickMute;  // mute is per-track
+    const muteFlag = slot.channels?.[muteField];
+    const volValue = unitToCC(slot.channels?.[volField] ?? 0.8);
+    const slotStartTicks = barOffset * TICKS_PER_BAR;
+
+    prevVol = emitCCWithRamp(events, channel, 7, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
+
     for (let bar = 0; bar < seqBars; bar++) {
       for (let step = 0; step < STEPS_PER_BAR; step++) {
-        const v = pat.kick?.[step] || 0;
+        const v = pat[patField]?.[step] || 0;
         if (v <= 0 || muteFlag) continue;
-        const onTicks = (barOffset + bar) * TICKS_PER_BAR + step * TICKS_PER_STEP;
+        const onTicks = slotStartTicks + bar * TICKS_PER_BAR + step * TICKS_PER_STEP;
         const offTicks = onTicks + Math.round(TICKS_PER_STEP * 0.95);
-        events.push(noteOn(onTicks, channel, kickPitch, unitToCC(v)));
-        events.push(noteOff(offTicks, channel, kickPitch));
+        events.push(noteOn(onTicks, channel, drumPitch, unitToCC(v)));
+        events.push(noteOff(offTicks, channel, drumPitch));
       }
     }
     barOffset += seqBars;
@@ -188,22 +220,26 @@ function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, kickPi
   return events;
 }
 
-function buildHatNoteTrack(name, channel, slots, fixedPatterns, seqBars) {
-  // Two layers — closed + open. Both on the same MIDI channel with
-  // GM-style different pitches so a single Digitone track can
-  // distinguish them (or treat them as the same hi-hat voice — the
-  // pad sound on t3 typically responds to whatever pitch comes in).
+function buildHatNoteTrack(name, channel, slots, fixedPatterns, seqBars, fadeMode, fadeSteps) {
+  // Two layers — closed + open — at GM-style hi-hat pitches on the same
+  // channel. AMP volume (CC 7) ramped per slot from hatVol.
   const events = [trackName(0, name)];
   pushRoleInitCCs(events, channel);
   let barOffset = 0;
+  let prevVol = null;
   for (const slot of slots) {
     const pat = slotPattern(slot, fixedPatterns);
     const muted = slot.channels?.hatMute;
-    for (let bar = 0; bar < seqBars; bar++) {
-      for (let step = 0; step < STEPS_PER_BAR; step++) {
-        const onTicks = (barOffset + bar) * TICKS_PER_BAR + step * TICKS_PER_STEP;
-        const offTicks = onTicks + Math.round(TICKS_PER_STEP * 0.95);
-        if (!muted) {
+    const volValue = unitToCC(slot.channels?.hatVol ?? 0.8);
+    const slotStartTicks = barOffset * TICKS_PER_BAR;
+
+    prevVol = emitCCWithRamp(events, channel, 7, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
+
+    if (!muted) {
+      for (let bar = 0; bar < seqBars; bar++) {
+        for (let step = 0; step < STEPS_PER_BAR; step++) {
+          const onTicks = slotStartTicks + bar * TICKS_PER_BAR + step * TICKS_PER_STEP;
+          const offTicks = onTicks + Math.round(TICKS_PER_STEP * 0.95);
           const ch_v = pat.chat?.[step] || 0;
           if (ch_v > 0) {
             events.push(noteOn(onTicks, channel, PITCH.chat, unitToCC(ch_v)));
@@ -224,34 +260,31 @@ function buildHatNoteTrack(name, channel, slots, fixedPatterns, seqBars) {
 }
 
 function buildBassTrack(name, channel, slots, fixedPatterns, seqBars, fadeMode, fadeSteps) {
-  // Notes (bass freq → MIDI pitch) PLUS automation on this same track:
-  //   CC 23 (filter_frequency) ramped between slots when fadeMode is on.
+  // Bass notes (Hz → MIDI pitch) plus the full bass-channel CC bus:
+  //   CC 23 filter_frequency  (filterMute → floor 80 Hz)
+  //   CC 13 delay_send        (delayMute → 0)
+  //   CC 9  amp_drive         (driveMute → 0)
+  //   CC 7  amp_volume        (bassVol; channel mute is per-step, not on volume)
+  // All four ramp between slots when fadeMode is on.
   const events = [trackName(0, name)];
   pushRoleInitCCs(events, channel);
   let barOffset = 0;
-  let prevFilter = null;
-  for (let s = 0; s < slots.length; s++) {
-    const slot = slots[s];
+  let prevFilter = null, prevDelay = null, prevDrive = null, prevVol = null;
+  for (const slot of slots) {
     const pat = slotPattern(slot, fixedPatterns);
     const muted = slot.channels?.bassMute;
-    const filterValue = filterHzToCC(slot.channels?.filterCut ?? 800);
-
+    const filterHz = slot.channels?.filterMute ? 80 : (slot.channels?.filterCut ?? 800);
+    const filterValue = filterHzToCC(filterHz);
+    const delayValue = unitToCC(slot.channels?.delayMute ? 0 : (slot.channels?.delayMix ?? 0.25));
+    const driveValue = unitToCC(slot.channels?.driveMute ? 0 : (slot.channels?.drive ?? 0.3));
+    const volValue = unitToCC(slot.channels?.bassVol ?? 0.8);
     const slotStartTicks = barOffset * TICKS_PER_BAR;
 
-    // Filter CC: ramp from prev → this if fading; otherwise plant a
-    // single anchor at slot start.
-    if (prevFilter === null) {
-      events.push(cc(slotStartTicks, channel, 23, filterValue));
-    } else if (fadeMode && prevFilter !== filterValue) {
-      const rampTicks = Math.round(fadeSteps * (TICKS_PER_STEP / 1));  // STEP_TIME unit = 16th note
-      const startRamp = Math.max(0, slotStartTicks - rampTicks);
-      rampCC(events, channel, 23, startRamp, slotStartTicks, prevFilter, filterValue, fadeSteps);
-    } else {
-      events.push(cc(slotStartTicks, channel, 23, filterValue));
-    }
-    prevFilter = filterValue;
+    prevFilter = emitCCWithRamp(events, channel, 23, filterValue, prevFilter, slotStartTicks, fadeMode, fadeSteps);
+    prevDelay  = emitCCWithRamp(events, channel, 13, delayValue,  prevDelay,  slotStartTicks, fadeMode, fadeSteps);
+    prevDrive  = emitCCWithRamp(events, channel, 9,  driveValue,  prevDrive,  slotStartTicks, fadeMode, fadeSteps);
+    prevVol    = emitCCWithRamp(events, channel, 7,  volValue,    prevVol,    slotStartTicks, fadeMode, fadeSteps);
 
-    // Notes.
     for (let bar = 0; bar < seqBars; bar++) {
       for (let step = 0; step < STEPS_PER_BAR; step++) {
         const freq = pat.bass?.[step] || 0;
@@ -264,32 +297,6 @@ function buildBassTrack(name, channel, slots, fixedPatterns, seqBars, fadeMode, 
         events.push(noteOff(offTicks, channel, pitch));
       }
     }
-    barOffset += seqBars;
-  }
-  events.push(endOfTrack(barOffset * TICKS_PER_BAR));
-  return events;
-}
-
-function buildMasterTrack(name, channel, slots, seqBars, fadeMode, fadeSteps) {
-  // Delay send CC 27 on auto channel (10). Same ramp logic as filter.
-  const events = [trackName(0, name)];
-  let barOffset = 0;
-  let prevDelay = null;
-  for (const slot of slots) {
-    const delayValue = unitToCC(slot.channels?.delayMix ?? 0.25);
-    const slotStartTicks = barOffset * TICKS_PER_BAR;
-
-    if (prevDelay === null) {
-      events.push(cc(slotStartTicks, channel, 27, delayValue));
-    } else if (fadeMode && prevDelay !== delayValue) {
-      const rampTicks = Math.round(fadeSteps * TICKS_PER_STEP);
-      const startRamp = Math.max(0, slotStartTicks - rampTicks);
-      rampCC(events, channel, 27, startRamp, slotStartTicks, prevDelay, delayValue, fadeSteps);
-    } else {
-      events.push(cc(slotStartTicks, channel, 27, delayValue));
-    }
-    prevDelay = delayValue;
-
     barOffset += seqBars;
   }
   events.push(endOfTrack(barOffset * TICKS_PER_BAR));
@@ -356,15 +363,19 @@ export function exportSongToMidi({
     slot.channels = slot.channels || {};
     if (slot.channels.filterCut === undefined) slot.channels.filterCut = 800;
     if (slot.channels.delayMix === undefined) slot.channels.delayMix = 0.25;
+    if (slot.channels.drive === undefined) slot.channels.drive = 0.3;
+    if (slot.channels.bassVol === undefined) slot.channels.bassVol = 0.8;
+    if (slot.channels.kickVol === undefined) slot.channels.kickVol = 0.8;
+    if (slot.channels.hatVol === undefined) slot.channels.hatVol = 0.8;
+    if (slot.channels.clapVol === undefined) slot.channels.clapVol = 0.8;
   }
 
   const trackLists = [
     buildMetaTrack(bpm),
-    buildDrumNoteTrack("drums", CH.drums, filled, fixedPatterns, seqBars, PITCH.kick),
+    buildDrumNoteTrack("drums", CH.drums, filled, fixedPatterns, seqBars, PITCH.kick, "kick", "kickMute", "kickVol", fadeMode, fadeSteps),
     buildBassTrack("bass", CH.bass, filled, fixedPatterns, seqBars, fadeMode, fadeSteps),
-    buildHatNoteTrack("pad", CH.pad, filled, fixedPatterns, seqBars),
-    buildDrumNoteTrack("lead", CH.lead, filled, fixedPatterns, seqBars, PITCH.clap),
-    buildMasterTrack("master", CH.master, filled, seqBars, fadeMode, fadeSteps),
+    buildHatNoteTrack("pad", CH.pad, filled, fixedPatterns, seqBars, fadeMode, fadeSteps),
+    buildDrumNoteTrack("lead", CH.lead, filled, fixedPatterns, seqBars, PITCH.clap, "clap", "clapMute", "clapVol", fadeMode, fadeSteps),
   ];
   return assembleSMF(trackLists);
 }
