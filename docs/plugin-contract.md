@@ -75,14 +75,20 @@ This table is the **suggested** mapping for an app targeting the first-class Dig
 | Source parameter | MIDI channel | CC | Digitone parameter | Value mapping |
 |------------------|--------------|----|--------------------|---------------|
 | Filter cutoff (Hz) | 2 (bass) | 23 | `t2.filter_frequency` | log-Hz → 0–127 |
-| Delay send (0–1) | 10 (auto) | 27 | `auto.master_delay_send` | linear 0–127 |
+| Bass delay send (0–1) | 2 (bass) | 13 | `t2.delay_send` | linear 0–127 |
 | Bass drive (0–1) | 2 (bass) | 9 | `t2.amp_drive` | linear 0–127 |
-| Track volume (0–1) | per-role | 95 | `<track>.track_level` | linear 0–127 |
-| Track mute | per-role | 94 | `<track>.track_mute` | 0 (un-muted) / 127 (muted) |
-| Reverb send (0–1) | 10 (auto) | 28 | `auto.master_reverb_send` | linear 0–127 |
-| Chorus send (0–1) | 10 (auto) | 26 | `auto.master_chorus_send` | linear 0–127 |
+| Per-role volume (0–1) | per-role | 7 | `<track>.amp_volume` | linear 0–127 |
+| Per-role mute | per-role | 94 | `<track>.track_mute` | 0 (un-muted) / 127 (muted) |
+| Per-role track level (init anchor only) | per-role | 95 | `<track>.track_level` | linear 0–127 |
+| Master reverb send (0–1) | 10 (auto) | 28 | `auto.master_reverb_send` | linear 0–127 |
+| Master chorus send (0–1) | 10 (auto) | 26 | `auto.master_chorus_send` | linear 0–127 |
+| Master delay send (0–1) | 10 (auto) | 27 | `auto.master_delay_send` | linear 0–127 |
 
 Channel assignments above match the reference `train_digitone` binding. The CC numbers come from CAT's hardware-verified Digitone profile at `~/cat-library/devices/digitone.toml`.
+
+**Volume convention.** Born Slippy currently uses **`amp_volume` (CC 7)** for the continuously-modulated per-slot volume and **`track_level` (CC 95)** only as a one-shot init anchor at delta 0 (set to ~100 to ensure audibility regardless of prior device state). The choice is intentional: `amp_volume` affects the synth voice level (audible mix change), `track_level` is the channel-strip fader (a global gain stage that the device can dim mid-performance unexpectedly). Other downstream tools MAY pick a different split; both columns are valid CC-95-vs-CC-7 targets for "volume".
+
+**Init anchors.** The reference Born Slippy exporter emits two anchor CCs at delta 0 on every note-bearing track: `track_mute=0` (un-muted) and `track_level=100`. This makes every exported file self-contained — playback is audible regardless of where mute/level were left from a previous session. Downstream tools SHOULD do the same.
 
 ### 2.7 Optional sidecar `<song>.cat.toml`
 
