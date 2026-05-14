@@ -7,6 +7,7 @@ import { createDistortionCurve } from "./audio/utils";
 import { loadDraft, createDraft, saveDraft, clearDraft, captureToDraft, updatePatternMeta, updateDraftMeta, updatePatternColor, addSet, deleteSet, switchSet, getDraftPatterns, getDraftColors, exportDraftAsJson, importDraftFromJson } from "./data/draftPackageStore";
 import VerticalSlider from "./components/VerticalSlider";
 import SlotButton from "./components/SlotButton";
+import { exportSongToMidi, downloadMidiBlob } from "./midi_exporter";
 
 export default function App() {
   // Admin mode detection
@@ -420,22 +421,28 @@ export default function App() {
         seqBarCountRef.current++;
         const pendingSlot=seqPendingSlotRef.current;
         const barsDue=seqBarCountRef.current>=seqBarsRef.current;
+        console.log('[SEQ] bar count:',seqBarCountRef.current,'barsDue:',barsDue,'pendingSlot:',pendingSlot,'cur:',seqCurrentSlotRef.current);
         if(pendingSlot!==null||barsDue){
           seqBarCountRef.current=0;
           const slots=savedSlotsRef.current;
+          const filledSlots=slots.map((s,i)=>s!==null?i:null).filter(i=>i!==null);
+          console.log('[SEQ] advancing — filled slots:',filledSlots,'cur:',seqCurrentSlotRef.current);
           let nextIdx=null;
           if(pendingSlot!==null&&slots[pendingSlot]!==null){
             nextIdx=pendingSlot;
             seqPendingSlotRef.current=null;
             setTimeout(()=>setSeqPendingSlot(-1),0);
           } else {
+            seqPendingSlotRef.current=null;
+            setTimeout(()=>setSeqPendingSlot(-1),0);
             const cur=seqCurrentSlotRef.current;
             const start=(cur<0?0:(cur+1))%24;
             for(let i=0;i<24;i++){
               const idx=(start+i)%24;
-              if(slots[idx]!==null){nextIdx=idx;break;}
+              if(slots[idx]!=null){nextIdx=idx;break;}
             }
           }
+          console.log('[SEQ] nextIdx:',nextIdx);
           if(nextIdx!==null){
             seqCurrentSlotRef.current=nextIdx;
             const slot=slots[nextIdx];
@@ -463,7 +470,7 @@ export default function App() {
     if(seqModeRef.current){
       const slots=savedSlotsRef.current;
       let cur=seqCurrentSlotRef.current;
-      if(cur<0||slots[cur]===null){ cur=-1; for(let i=0;i<24;i++){if(slots[i]!==null){cur=i;break;}} }
+      if(cur<0||slots[cur]==null){ cur=-1; for(let i=0;i<24;i++){if(slots[i]!=null){cur=i;break;}} }
       if(cur>=0){
         const slot=slots[cur];
         seqCurrentSlotRef.current=cur; setSeqCurrentSlot(cur); setActiveSlot(cur);
@@ -770,6 +777,35 @@ export default function App() {
     activePatternRef.current=0;setActivePattern(0);setSelectedPattern(0);
   },[stopSeq]);
 
+  // Export-to-CAT (plugin import contract). Walks filled slots in
+  // slot-machine order, lays each one as `seqBars` bars on role-named
+  // MIDI tracks, ramps filter / delay between slots when fadeMode is
+  // on. The downloaded .mid is consumed by `cat play-midi`.
+  const [exportStatus, setExportStatus] = useState("");
+  const handleExportToCat = useCallback(() => {
+    try {
+      const bytes = exportSongToMidi({
+        slots: savedSlots,
+        fixedPatterns: effectivePatterns,
+        seqBars,
+        fadeMode,
+        fadeSteps,
+        bpm,
+      });
+      const ts = new Date()
+        .toISOString()
+        .replace(/[:T]/g, "-")
+        .replace(/\..*/, "");
+      downloadMidiBlob(bytes, `born-slippy-${ts}.mid`);
+      const filled = savedSlots.filter((s) => s !== null).length;
+      setExportStatus(
+        `exported ${filled} slot${filled === 1 ? "" : "s"} × ${seqBars} bar${seqBars > 1 ? "s" : ""} (${bytes.byteLength} bytes)`
+      );
+    } catch (e) {
+      setExportStatus(`error: ${e.message}`);
+    }
+  }, [savedSlots, effectivePatterns, seqBars, fadeMode, fadeSteps, bpm]);
+
   const btn={fontFamily:"'Space Mono', monospace",cursor:"pointer",WebkitTapHighlightColor:"transparent",transition:"all 0.15s",fontWeight:700,textTransform:"uppercase",letterSpacing:1};
 
   return (
@@ -973,6 +1009,35 @@ export default function App() {
             ✕ CLEAR
           </button>
           <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{ display:"none" }} />
+        </div>
+      </div>
+
+      <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>
+          EXPORT TO CAT (MIDI)
+        </div>
+        <button
+          onClick={handleExportToCat}
+          disabled={savedSlots.every((s) => s === null)}
+          style={{
+            ...btn,
+            width:"100%",
+            padding:"8px 4px",
+            fontSize:10,
+            background: savedSlots.every((s) => s === null)
+              ? (theme === 'dark' ? "#222" : "#ddd")
+              : (theme === 'dark' ? "#2a4a30" : "#c8e8d0"),
+            color: savedSlots.every((s) => s === null)
+              ? "#666"
+              : (theme === 'dark' ? "#a0e0a0" : "#205020"),
+            border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#888"}`,
+            borderRadius:4,
+          }}
+        >
+          DOWNLOAD .MID
+        </button>
+        <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
+          {exportStatus || `Walks filled slots in order × ${seqBars} bar${seqBars > 1 ? "s" : ""} each • includes filter & delay${fadeMode ? " ramps" : ""}`}
         </div>
       </div>
 
