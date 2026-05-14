@@ -223,6 +223,16 @@ export default function App() {
   useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
 
   const channelNames = { 1:'Bass', 2:'Kick', 3:'Hats', 4:'Clap' };
+  const sendMidiCC = useCallback((channel, controller, value) => {
+    const out = selectedMidiOutputRef.current;
+    if (!out) return;
+    const v = Math.max(0, Math.min(127, value | 0));
+    out.send([0xB0 + channel - 1, controller & 0x7f, v]);
+    if (midiLogRef.current) {
+      const ts = new Date().toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+      setMidiLogEntries(prev => [...prev, `${ts}  CC      ch${channel} (${channelNames[channel]||'?'})  cc=${controller}  val=${v}`]);
+    }
+  }, []);
   const sendMidiNote = useCallback((channel, note, velocity, time) => {
     const output = selectedMidiOutputRef.current;
     if (!output) return;
@@ -648,6 +658,37 @@ export default function App() {
   useEffect(()=>{const n=nodesRef.current;if(n.bassFilter)n.bassFilter.frequency.value=filterMute?80:filterCut;},[filterCut,filterMute]);
   useEffect(()=>{const n=nodesRef.current;if(n.delaySend)n.delaySend.gain.value=delayMute?0:delayMix;},[delayMix,delayMute]);
   useEffect(()=>{const n=nodesRef.current;if(n.bassDistortion)n.bassDistortion.curve=createDistortionCurve(driveMute?0:drive*50);},[drive,driveMute]);
+
+  // When the Elektron Digitone is the live MIDI output, mirror filter /
+  // delay / drive slider positions onto the bass track via CC:
+  //   FLTR cutoff   → CC 23 (filter_frequency)  log-mapped 80..4000Hz
+  //   AMP delay     → CC 13 (delay_send)        linear 0..1
+  //   AMP drive     → CC 9  (amp_drive)         linear 0..1
+  // CC numbers from ~/cat-library/devices/digitone.toml.
+  // Muted controls send the muted (zero/floor) value so the device tracks the UI.
+  const isDigitoneOutput = selectedMidiOutput?.name?.toLowerCase().includes('digitone');
+  useEffect(() => {
+    if (!isDigitoneOutput) return;
+    const v = filterMute ? 80 : filterCut;
+    const cc = Math.round(Math.log2(Math.max(80, Math.min(4000, v)) / 80) / Math.log2(4000 / 80) * 127);
+    sendMidiCC(midiChannels.bass, 23, cc);
+  }, [filterCut, filterMute, isDigitoneOutput, sendMidiCC, midiChannels.bass]);
+  useEffect(() => {
+    if (!isDigitoneOutput) return;
+    const v = delayMute ? 0 : delayMix;
+    sendMidiCC(midiChannels.bass, 13, Math.round(v * 127));
+  }, [delayMix, delayMute, isDigitoneOutput, sendMidiCC, midiChannels.bass]);
+  useEffect(() => {
+    if (!isDigitoneOutput) return;
+    const v = driveMute ? 0 : drive;
+    sendMidiCC(midiChannels.bass, 9, Math.round(v * 127));
+  }, [drive, driveMute, isDigitoneOutput, sendMidiCC, midiChannels.bass]);
+
+  // Per-track AMP VOL → CC 7 (amp_volume) on each track's channel.
+  useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.bass, 7, Math.round(bassVol * 127)); }, [bassVol, isDigitoneOutput, sendMidiCC, midiChannels.bass]);
+  useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.kick, 7, Math.round(kickVol * 127)); }, [kickVol, isDigitoneOutput, sendMidiCC, midiChannels.kick]);
+  useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.hats, 7, Math.round(hatVol * 127)); }, [hatVol, isDigitoneOutput, sendMidiCC, midiChannels.hats]);
+  useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.clap, 7, Math.round(clapVol * 127)); }, [clapVol, isDigitoneOutput, sendMidiCC, midiChannels.clap]);
   useEffect(()=>()=>{if(timerRef.current)clearTimeout(timerRef.current);if(fadeTimerRef.current)clearInterval(fadeTimerRef.current);},[]);
   useEffect(()=>{
     const resume=()=>{ if(ctxRef.current&&ctxRef.current.state!=="running") ctxRef.current.resume(); };
@@ -971,14 +1012,16 @@ export default function App() {
         }}>{theme === 'dark' ? '☀' : '🌙'}</button>
       </div>
 
-      <div style={{ display:"flex", gap:2, padding:"10px 6px 6px", background:theme === 'dark' ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.06)", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, width:"100%", maxWidth:380, justifyContent:"space-around" }}>
-        <VerticalSlider label="Bass" value={bassVol} onChange={setBassVol} muted={anySolo?!bassSolo:bassMute} onMute={()=>setBassMute(v=>!v)} solo={bassSolo} onSolo={()=>setBassSolo(v=>!v)} soloActive={anySolo} rec={bassRec} onRec={()=>{setBassRec(v=>!v);if(!bassRec){setBassMute(false);if(anySolo)setBassSolo(true);}}} isDark={theme === 'dark'} />
+      <div style={{ display:"flex", gap:4, padding:"10px 6px 6px", background:theme === 'dark' ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.06)", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, width:"100%", maxWidth:380, justifyContent:"space-around", alignItems:"stretch" }}>
+        <div style={{ display:"flex", gap:2, padding:"4px 4px 2px", border:`1px ${isDigitoneOutput ? "solid" : "dashed"} ${isDigitoneOutput ? "#e08040" : (theme === 'dark' ? "#2a2a2a" : "#bbb")}`, borderRadius:6, boxShadow:isDigitoneOutput ? "0 0 8px rgba(224,128,64,0.25)" : "none", transition:"border-color 0.2s, box-shadow 0.2s" }}>
+          <VerticalSlider label="Bass" value={bassVol} onChange={setBassVol} muted={anySolo?!bassSolo:bassMute} onMute={()=>setBassMute(v=>!v)} solo={bassSolo} onSolo={()=>setBassSolo(v=>!v)} soloActive={anySolo} rec={bassRec} onRec={()=>{setBassRec(v=>!v);if(!bassRec){setBassMute(false);if(anySolo)setBassSolo(true);}}} isDark={theme === 'dark'} />
+          <VerticalSlider label="Filt" value={filterCut} onChange={setFilterCut} min={80} max={4000} color="#e08040" muted={filterMute} onMute={()=>setFilterMute(v=>!v)} isDark={theme === 'dark'} log />
+          <VerticalSlider label="Dly" value={delayMix} onChange={setDelayMix} color="#d06030" muted={delayMute} onMute={()=>setDelayMute(v=>!v)} isDark={theme === 'dark'} />
+          <VerticalSlider label="Drv" value={drive} onChange={setDrive} color="#c04020" muted={driveMute} onMute={()=>setDriveMute(v=>!v)} isDark={theme === 'dark'} />
+        </div>
         <VerticalSlider label="Kick" value={kickVol} onChange={setKickVol} muted={anySolo?!kickSolo:kickMute} onMute={()=>setKickMute(v=>!v)} solo={kickSolo} onSolo={()=>setKickSolo(v=>!v)} soloActive={anySolo} rec={kickRec} onRec={()=>{setKickRec(v=>!v);if(!kickRec){setKickMute(false);if(anySolo)setKickSolo(true);}}} isDark={theme === 'dark'} />
         <VerticalSlider label="Hats" value={hatVol} onChange={setHatVol} muted={anySolo?!hatSolo:hatMute} onMute={()=>setHatMute(v=>!v)} solo={hatSolo} onSolo={()=>setHatSolo(v=>!v)} soloActive={anySolo} rec={hatRec} onRec={()=>{setHatRec(v=>!v);if(!hatRec){setHatMute(false);if(anySolo)setHatSolo(true);}}} isDark={theme === 'dark'} />
         <VerticalSlider label="Clap" value={clapVol} onChange={setClapVol} muted={anySolo?!clapSolo:clapMute} onMute={()=>setClapMute(v=>!v)} solo={clapSolo} onSolo={()=>setClapSolo(v=>!v)} soloActive={anySolo} rec={clapRec} onRec={()=>{setClapRec(v=>!v);if(!clapRec){setClapMute(false);if(anySolo)setClapSolo(true);}}} color="#cc4422" isDark={theme === 'dark'} />
-        <VerticalSlider label="Filt" value={filterCut} onChange={setFilterCut} min={80} max={4000} color="#e08040" muted={filterMute} onMute={()=>setFilterMute(v=>!v)} isDark={theme === 'dark'} log />
-        <VerticalSlider label="Dly" value={delayMix} onChange={setDelayMix} color="#d06030" muted={delayMute} onMute={()=>setDelayMute(v=>!v)} isDark={theme === 'dark'} />
-        <VerticalSlider label="Drv" value={drive} onChange={setDrive} color="#c04020" muted={driveMute} onMute={()=>setDriveMute(v=>!v)} isDark={theme === 'dark'} />
       </div>
 
       <div style={{ width:"100%", maxWidth:380, background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
