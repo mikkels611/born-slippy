@@ -8,6 +8,7 @@ import { loadDraft, createDraft, saveDraft, clearDraft, captureToDraft, updatePa
 import VerticalSlider from "./components/VerticalSlider";
 import SlotButton from "./components/SlotButton";
 import { exportSongToMidi, downloadMidiBlob } from "./midi_exporter";
+import { catLink, CAT_OUTPUT_ID } from "./catLink";
 
 export default function App() {
   // Admin mode detection
@@ -15,6 +16,16 @@ export default function App() {
     const params = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
     return params.get('admin') === 'true';
   }, []);
+  // Seq-transition timing log. Enable with ?seqlog=1 in the URL.
+  // Logs each slot transition with wall-clock elapsed time since Play
+  // so the live sequencer's actual loop length can be measured.
+  const seqLogEnabled = useMemo(() => {
+    const params = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+    return params.get('seqlog') === '1';
+  }, []);
+  const seqLogRef = useRef(false);
+  useEffect(() => { seqLogRef.current = seqLogEnabled; }, [seqLogEnabled]);
+  const playStartTimeRef = useRef(0);
   const [draft, setDraft] = useState(() => adminMode ? loadDraft() : null);
   const [editingPatternName, setEditingPatternName] = useState(null);
   const [adminMetaOpen, setAdminMetaOpen] = useState(false);
@@ -85,7 +96,7 @@ export default function App() {
   const [midiOutputs, setMidiOutputs] = useState([]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
   const selectedMidiOutputRef = useRef(null);
-  const midiChannels = { bass: 1, kick: 2, hats: 3, clap: 4 };
+  const midiChannels = { kick: 1, bass: 2, hats: 3, clap: 4 };
   const [muteAudio, setMuteAudio] = useState(false);
   const muteAudioRef = useRef(false);
   const [midiLog, setMidiLog] = useState(false);
@@ -148,7 +159,6 @@ export default function App() {
   useEffect(()=>{ fadeModeRef.current=fadeMode; },[fadeMode]);
   useEffect(()=>{ seqModeRef.current=seqPlay; },[seqPlay]);
   useEffect(()=>{ seqBarsRef.current=seqBars; },[seqBars]);
-  useEffect(()=>{ seqCurrentSlotRef.current=seqCurrentSlot; },[seqCurrentSlot]);
   useEffect(()=>{ playingRef.current=playing; },[playing]);
   useEffect(()=>{ savedSlotsRef.current=savedSlots; },[savedSlots]);
   useEffect(()=>{ stepTimeRef.current=stepTime; },[stepTime]);
@@ -166,6 +176,7 @@ export default function App() {
           const outputs = Array.from(access.outputs.values());
           setMidiOutputs(outputs);
           setSelectedMidiOutput(prev => {
+            if (prev?.id === CAT_OUTPUT_ID) return prev; // CAT link is not a Web MIDI port
             if (prev && outputs.some(o => o.id === prev.id)) return prev;
             return outputs.length > 0 ? outputs[0] : null;
           });
@@ -222,7 +233,14 @@ export default function App() {
 
   useEffect(() => { selectedMidiOutputRef.current = selectedMidiOutput; }, [selectedMidiOutput]);
 
-  const channelNames = { 1:'Bass', 2:'Kick', 3:'Hats', 4:'Clap' };
+  const [catState, setCatState] = useState({ status: 'off', routes: null, binding: null, lastError: null });
+  useEffect(() => catLink.subscribe(setCatState), []);
+  useEffect(() => {
+    if (selectedMidiOutput?.id === CAT_OUTPUT_ID) catLink.connect();
+    else catLink.disconnect();
+  }, [selectedMidiOutput]);
+
+  const channelNames = { 1:'Kick', 2:'Bass', 3:'Hats', 4:'Clap' };
   const sendMidiCC = useCallback((channel, controller, value) => {
     const out = selectedMidiOutputRef.current;
     if (!out) return;
@@ -415,8 +433,16 @@ export default function App() {
       if(seqPendingUIRef.current!==null){
         const {idx,slot}=seqPendingUIRef.current;
         seqPendingUIRef.current=null;
+        if(seqLogRef.current){
+          const elapsed = time - playStartTimeRef.current;
+          console.log(`[SEQ] slot ${idx+1} starts @ ${elapsed.toFixed(3)}s (audio t=${time.toFixed(3)})`);
+        }
         setTimeout(()=>{
           if(!playingRef.current) return;
+          // NOTE: do not write seqCurrentSlotRef here — the scheduler's
+          // advance has already moved it forward to plan the next slot,
+          // and overwriting it back to `idx` (the slot that just became
+          // audible) causes the next advance to re-pick the same slot.
           setSeqCurrentSlot(idx); setActiveSlot(idx);
           if(fadeModeRef.current && startFadeRef.current) {
             if(fadeActiveRef.current){
@@ -431,12 +457,12 @@ export default function App() {
         seqBarCountRef.current++;
         const pendingSlot=seqPendingSlotRef.current;
         const barsDue=seqBarCountRef.current>=seqBarsRef.current;
-        console.log('[SEQ] bar count:',seqBarCountRef.current,'barsDue:',barsDue,'pendingSlot:',pendingSlot,'cur:',seqCurrentSlotRef.current);
+        if(seqLogRef.current) console.log('[SEQ] bar count:',seqBarCountRef.current,'barsDue:',barsDue,'pendingSlot:',pendingSlot,'cur:',seqCurrentSlotRef.current);
         if(pendingSlot!==null||barsDue){
           seqBarCountRef.current=0;
           const slots=savedSlotsRef.current;
           const filledSlots=slots.map((s,i)=>s!==null?i:null).filter(i=>i!==null);
-          console.log('[SEQ] advancing — filled slots:',filledSlots,'cur:',seqCurrentSlotRef.current);
+          if(seqLogRef.current) console.log('[SEQ] advancing — filled slots:',filledSlots,'cur:',seqCurrentSlotRef.current);
           let nextIdx=null;
           if(pendingSlot!==null&&slots[pendingSlot]!==null){
             nextIdx=pendingSlot;
@@ -452,7 +478,7 @@ export default function App() {
               if(slots[idx]!=null){nextIdx=idx;break;}
             }
           }
-          console.log('[SEQ] nextIdx:',nextIdx);
+          if(seqLogRef.current) console.log('[SEQ] nextIdx:',nextIdx);
           if(nextIdx!==null){
             seqCurrentSlotRef.current=nextIdx;
             const slot=slots[nextIdx];
@@ -477,6 +503,7 @@ export default function App() {
     if(ctx.state==="suspended"||ctx.state==="interrupted") await ctx.resume();
     stepRef.current=0; pendingPatternRef.current=null; pendingPatternsRef.current=null;
     seqBarCountRef.current=0;
+    seqPendingUIRef.current=null;
     if(seqModeRef.current){
       const slots=savedSlotsRef.current;
       let cur=seqCurrentSlotRef.current;
@@ -494,6 +521,11 @@ export default function App() {
       activePatternRef.current=selectedPattern; setActivePattern(selectedPattern);
     }
     let nextTime=ctx.currentTime+0.05;
+    playStartTimeRef.current=nextTime;
+    if(seqLogRef.current){
+      const curSlot=seqCurrentSlotRef.current;
+      console.log(`[SEQ] play start @ audio t=${nextTime.toFixed(3)} (seqBars=${seqBarsRef.current}, bpm=${(60/(stepTimeRef.current*4)).toFixed(1)}, first slot=${curSlot>=0?curSlot+1:'-'})`);
+    }
     const sched=()=>{while(nextTime<ctx.currentTime+0.2){scheduleStep(ctx,stepRef.current,nextTime);const s=stepRef.current%STEPS;setTimeout(()=>setCurrentStep(s),(nextTime-ctx.currentTime)*1000);nextTime+=stepTimeRef.current;stepRef.current++;}timerRef.current=setTimeout(sched,100);};
     playingRef.current=true;
     startMidiClock();
@@ -506,6 +538,7 @@ export default function App() {
     stopMidiClock();
     setPlaying(false);setCurrentStep(-1);
     seqPendingSlotRef.current=null;setSeqPendingSlot(-1);
+    seqPendingUIRef.current=null;
     if(reset){seqCurrentSlotRef.current=-1;setSeqCurrentSlot(-1);}
   },[stopMidiClock]);
 
@@ -689,6 +722,23 @@ export default function App() {
   useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.kick, 7, Math.round(kickVol * 127)); }, [kickVol, isDigitoneOutput, sendMidiCC, midiChannels.kick]);
   useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.hats, 7, Math.round(hatVol * 127)); }, [hatVol, isDigitoneOutput, sendMidiCC, midiChannels.hats]);
   useEffect(() => { if (isDigitoneOutput) sendMidiCC(midiChannels.clap, 7, Math.round(clapVol * 127)); }, [clapVol, isDigitoneOutput, sendMidiCC, midiChannels.clap]);
+
+  // CAT lane controls (gateway protocol v1 `control`, normalized 0-1).
+  // Effects re-fire when catConnected flips on, so the current mixer
+  // state is pushed as init anchors on every (re)connect.
+  const catConnected = selectedMidiOutput?.id === CAT_OUTPUT_ID && catState.status === 'connected';
+  useEffect(() => {
+    if (!catConnected) return;
+    const v = filterMute ? 80 : filterCut;
+    const pos = Math.log2(Math.max(80, Math.min(4000, v)) / 80) / Math.log2(4000 / 80);
+    catLink.control('bass', 'filter', pos);
+  }, [filterCut, filterMute, catConnected]);
+  useEffect(() => { if (catConnected) catLink.control('bass', 'delay_send', delayMute ? 0 : delayMix); }, [delayMix, delayMute, catConnected]);
+  useEffect(() => { if (catConnected) catLink.control('bass', 'drive', driveMute ? 0 : drive); }, [drive, driveMute, catConnected]);
+  useEffect(() => { if (catConnected) catLink.control('bass', 'volume', bassVol); }, [bassVol, catConnected]);
+  useEffect(() => { if (catConnected) catLink.control('kick', 'volume', kickVol); }, [kickVol, catConnected]);
+  useEffect(() => { if (catConnected) { catLink.control('hihat', 'volume', hatVol); catLink.control('openhat', 'volume', hatVol); } }, [hatVol, catConnected]);
+  useEffect(() => { if (catConnected) catLink.control('clap', 'volume', clapVol); }, [clapVol, catConnected]);
   useEffect(()=>()=>{if(timerRef.current)clearTimeout(timerRef.current);if(fadeTimerRef.current)clearInterval(fadeTimerRef.current);},[]);
   useEffect(()=>{
     const resume=()=>{ if(ctxRef.current&&ctxRef.current.state!=="running") ctxRef.current.resume(); };
@@ -1157,13 +1207,42 @@ export default function App() {
             {/* MIDI Output */}
             <div style={{ background:theme === 'dark' ? "rgba(255,255,255,0.01)" : "#edeef2", borderRadius:10, border:`1px solid ${theme === 'dark' ? "#1a1a1a" : "#ccc"}`, padding:"10px 8px 8px" }}>
               <div style={{ fontSize:8, color:theme === 'dark' ? "#444" : "#555", letterSpacing:2, textTransform:"uppercase", textAlign:"center", marginBottom:6 }}>MIDI OUTPUT</div>
-              <select onChange={(e) => setSelectedMidiOutput(midiOutputs.find(o => o.id === e.target.value) || null)} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
+              <select onChange={(e) => setSelectedMidiOutput(e.target.value === CAT_OUTPUT_ID ? catLink.output : (midiOutputs.find(o => o.id === e.target.value) || null))} value={selectedMidiOutput?.id || ''} style={{ width:"100%", background:theme === 'dark' ? "#1a1a1a" : "#fff", border:`1px solid ${theme === 'dark' ? "#333" : "#ccc"}`, color:theme === 'dark' ? "#ccc" : "#000", fontSize:10, padding:4, borderRadius:4 }}>
                 <option value='' style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>No MIDI Output</option>
+                <option value={CAT_OUTPUT_ID} style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>CAT (localhost)</option>
                 {midiOutputs.map(o => <option key={o.id} value={o.id} style={{ background:theme === 'dark' ? "#1a1a1a" : "#fff", color:theme === 'dark' ? "#ccc" : "#000" }}>{o.name}</option>)}
               </select>
+              {selectedMidiOutput?.id !== CAT_OUTPUT_ID && (
               <div style={{ fontSize:8, color:theme === 'dark' ? "#666" : "#444", textAlign:"center", marginTop:6 }}>
                 Channels: Bass Ch{midiChannels.bass}, Kick Ch{midiChannels.kick}, Hats Ch{midiChannels.hats}, Clap Ch{midiChannels.clap}
               </div>
+              )}
+              {selectedMidiOutput?.id === CAT_OUTPUT_ID && (
+                <div style={{ marginTop:6 }}>
+                  <div style={{ fontSize:9, textAlign:"center", color: catState.status === 'connected' ? (theme === 'dark' ? "#4c4" : "#080") : (theme === 'dark' ? "#c66" : "#a00") }}>
+                    {catState.status === 'connected' ? `Connected${catState.binding ? ` · ${catState.binding}` : ''}` : catState.status === 'connecting' ? 'Connecting…' : (catState.lastError || 'Disconnected')}
+                  </div>
+                  {catState.routes && (
+                    <div style={{ marginTop:4, display:"flex", flexDirection:"column", gap:2 }}>
+                      {[['bass','Bass'],['kick','Kick'],['hihat','Hi-hat'],['openhat','Open hat'],['clap','Clap']].map(([lane, label]) => {
+                        const r = catState.routes[lane];
+                        if (!r) return null;
+                        return (
+                          <div key={lane} style={{ display:"flex", alignItems:"center", gap:4, fontSize:8, color:theme === 'dark' ? "#999" : "#333" }}>
+                            <span style={{ width:44 }}>{label}</span>
+                            <span style={{ flex:1, fontFamily:"'Space Mono',monospace" }}>
+                              {r.device}.{r.track} ch{r.channel}{r.note !== undefined ? ` n${r.note}` : ''}
+                            </span>
+                            <span style={{ color: r.status === 'routed' ? (theme === 'dark' ? "#4c4" : "#080") : (theme === 'dark' ? "#c66" : "#a00") }}>{r.status}</span>
+                            <button onClick={() => catLink.test(lane)} style={{ fontSize:8, color:theme === 'dark' ? "#888" : "#555", background:theme === 'dark' ? "#1a1a1a" : "#ddd", border:`1px solid ${theme === 'dark' ? "#333" : "#bbb"}`, borderRadius:3, padding:"0 5px", cursor:"pointer" }}>Test</button>
+                          </div>
+                        );
+                      })}
+                      <button onClick={() => catLink.refreshRouting()} style={{ marginTop:2, fontSize:8, color:theme === 'dark' ? "#888" : "#555", background:theme === 'dark' ? "#1a1a1a" : "#ddd", border:`1px solid ${theme === 'dark' ? "#333" : "#bbb"}`, borderRadius:3, padding:"1px 6px", cursor:"pointer", alignSelf:"center" }}>Refresh routing</button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:8 }}>
                 <label style={{ fontSize:10, color:theme === 'dark' ? "#ccc" : "#000" }}>
                   <input type="checkbox" checked={muteAudio} onChange={(e) => setMuteAudio(e.target.checked)} style={{ marginRight:4 }} />

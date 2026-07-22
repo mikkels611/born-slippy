@@ -19,7 +19,7 @@ CAT does **not** synthesize sound. It dispatches MIDI to hardware (or to a virtu
 CAT exposes two integration shapes:
 
 1. **Import (this contract)** — a downstream tool writes a Standard MIDI File; the user runs `cat play-midi <file>.mid --binding <name>` and the music plays. This is the simplest seam and the one this document specifies.
-2. **Live** (future) — a real-time wire protocol over WebSocket / OSC that lets browser apps drive CAT directly. Sketched in CAT's OpenSpec; not part of this contract yet. Apps targeting the import contract today will be forward-compatible with the live contract when it lands (same role model, same parameter naming).
+2. **Live v1 (localhost)** — a real-time JSON-over-WebSocket protocol served by `cat gateway` on `ws://127.0.0.1:8766/ws` (CAT change 013, `spec/openspec/changes/013-born-slippy-gateway/specs/gateway-protocol/spec.md`). The client sends musical **lanes** (`bass`, `kick`, `clap`, `hihat`, `openhat`) as `note`/`trigger` events; CAT resolves lanes to hardware routes at event time and reports routing provenance. Born Slippy's reference client is `src/catLink.js`. Same-machine only in v1; Wi-Fi/LAN is a later milestone. The role model and naming match the import contract, so apps targeting either shape stay compatible with the other.
 
 ## 2. The wire format
 
