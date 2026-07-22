@@ -1,7 +1,5 @@
 # CAT Plugin Contract — for downstream creative tools
 
-> **Vendored copy.** This file is a verbatim copy of `spec/plugin-contract.md` in the CAT repository (canonical source). Born Slippy's MIDI exporter ([src/midi_exporter.js](../src/midi_exporter.js)) targets this contract. When the canonical version and this vendored copy diverge, the canonical version wins — please open an issue in CAT to resync.
-
 **Status**: stable as of 2026-05-14. Backwards-compatible changes only.
 
 **Audience**: developers of external apps (Born Slippy, future web/mobile/DAW tools) who want their creative output to play through CAT on real hardware. You do not need CAT checked out to target this contract — write a Standard MIDI File following the rules below and CAT will play it.
@@ -19,7 +17,7 @@ CAT does **not** synthesize sound. It dispatches MIDI to hardware (or to a virtu
 CAT exposes two integration shapes:
 
 1. **Import (this contract)** — a downstream tool writes a Standard MIDI File; the user runs `cat play-midi <file>.mid --binding <name>` and the music plays. This is the simplest seam and the one this document specifies.
-2. **Live v1 (localhost)** — a real-time JSON-over-WebSocket protocol served by `cat gateway` on `ws://127.0.0.1:8766/ws` (CAT change 013, `spec/openspec/changes/013-born-slippy-gateway/specs/gateway-protocol/spec.md`). The client sends musical **lanes** (`bass`, `kick`, `clap`, `hihat`, `openhat`) as `note`/`trigger` events; CAT resolves lanes to hardware routes at event time and reports routing provenance. Born Slippy's reference client is `src/catLink.js`. Same-machine only in v1; Wi-Fi/LAN is a later milestone. The role model and naming match the import contract, so apps targeting either shape stay compatible with the other.
+2. **Live v1 (localhost)** — a real-time JSON-over-WebSocket protocol served by `cat gateway` on `ws://127.0.0.1:8766/ws` (change 013, `spec/openspec/changes/013-born-slippy-gateway/specs/gateway-protocol/spec.md`). The client sends musical **lanes** (`bass`, `kick`, `clap`, `hihat`, `openhat`) as `note`/`trigger` events; CAT resolves lanes to hardware routes at event time and reports routing provenance. Born Slippy's reference client is its `src/catLink.js`. Same-machine only in v1; Wi-Fi/LAN is a later milestone. The role model and naming match the import contract, so apps targeting either shape stay compatible with the other.
 
 ## 2. The wire format
 
@@ -29,15 +27,17 @@ A **Standard MIDI File (SMF) type 1**. Every popular MIDI library can emit one (
 
 ### 2.2 Track-name routing
 
-Each MIDI track's name (SMF `track_name` meta-event at delta 0) MUST be matched literally against the role names in CAT's active binding. The reference binding `train_digitone` defines:
+Each MIDI track's name (SMF `track_name` meta-event at delta 0) MUST be matched literally against the role names in CAT's active binding. The reference binding `born_slippy_a4_rytm` (change 013 — same lane model as the Live protocol) defines:
 
-| Track name | CAT role | Digitone track | MIDI channel |
-|------------|----------|----------------|--------------|
-| `drums` | `drums` | t1 | 1 |
-| `bass` | `bass` | t2 | 2 |
-| `pad` | `pad` | t3 | 3 |
-| `lead` | `lead` | t4 | 4 |
-| `master` | `master` | fx (auto-channel for sends) | 10 |
+| Track name | CAT role | Device target | Note convention |
+|------------|----------|---------------|-----------------|
+| `bass` | `bass` | A4 T4 (ch 4) | real pitches |
+| `kick` | `kick` | Rytm BD via auto ch 14 | trig note 0 |
+| `hihat` | `hihat` | Rytm CH via auto ch 14 | trig note 8 |
+| `openhat` | `openhat` | Rytm OH via auto ch 14 | trig note 9 |
+| `clap` | `clap` | Rytm CP via auto ch 14 | trig note 3 |
+
+The older `train_digitone` binding (`drums`/`bass`/`pad`/`lead`/`master`, channels 1–4 + 10, GM drum pitches) remains valid for Digitone-targeted exports.
 
 Tracks whose name does not match any role are skipped with a non-fatal warning. **Multiple tracks MAY share a role name** — typically one carrying notes and one carrying CC automation. Both are dispatched.
 
@@ -49,14 +49,10 @@ A `set_tempo` meta-event at delta 0 carries the initial tempo (microseconds per 
 
 Standard `note_on` / `note_off` events on a role-named track produce notes on the role's bound device track. The MIDI channel of the note event is informational; CAT routes by role-name and uses the binding's channel.
 
-**Drum pitch conventions** (General-MIDI flavoured) when the role is a drum role:
+**Drum pitch conventions depend on the binding's drum mechanism:**
 
-| Sound | MIDI pitch |
-|-------|-----------:|
-| kick | 36 |
-| closed hi-hat | 42 |
-| open hi-hat | 46 |
-| clap | 39 |
+- Roles bound to the **Rytm auto channel** (`rytm.auto`, the `born_slippy_a4_rytm` way) MUST use **trig notes**: note = Rytm track − 1 selects the voice directly (manual §8.6) — kick 0, clap 3, closed hat 8, open hat 9. GM pitches on an auto-channel role play the device's *active* track chromatically — the wrong voice.
+- Roles bound to a **per-track channel** (the `train_digitone` way) use General-MIDI-flavoured pitches: kick 36, clap 39, closed hat 42, open hat 46.
 
 **Bass / lead pitches** are real MIDI note numbers (60 = middle C). To convert a frequency in Hz: `pitch = round(69 + 12 · log2(freq / 440))`.
 
@@ -68,9 +64,23 @@ Standard `note_on` / `note_off` events on a role-named track produce notes on th
 
 **Transition ramps** are expressed as dense CC events. The exporter picks the update rate (one CC per 16th-note ≈ 8.8 Hz at 133 BPM is a natural choice — that's how Born Slippy's `startFade()` runs). CAT plays the events back verbatim at their encoded musical times using absolute-deadline pacing.
 
-### 2.6 Recommended CC mapping for Digitone
+### 2.6 Recommended CC mapping — A4 + Rytm (`born_slippy_a4_rytm`)
 
-This table is the **suggested** mapping for an app targeting the first-class Digitone binding. Other bindings / devices MAY use different mappings (a `.cat.toml` sidecar can override). Apps are free to emit only the subset of automation they care about.
+Lane **volume is TRACK LEVEL (CC 95)** on the voice's own channel, matching the Live protocol's mixer semantics — mixer automation must not mutate sound patches. `track_mute` (CC 94) anchors playback audible.
+
+| Source parameter | MIDI channel | CC | Parameter | Value mapping |
+|------------------|--------------|----|-----------|---------------|
+| Bass volume (0–1) | 4 (A4 T4) | 95 | `t4.track_level` | linear 0–127 |
+| Kick volume (0–1) | 1 (Rytm T1) | 95 | `t1.level` | linear 0–127 |
+| Hat volume (0–1) | 9 + 10 (Rytm T9/T10) | 95 | `t9.level` / `t10.level` | linear 0–127 |
+| Clap volume (0–1) | 4 (Rytm T4) | 95 | `t4.level` | linear 0–127 |
+| Per-voice mute anchor | per-voice | 94 | `track_mute` | 0 at delta 0 |
+
+**Known limitation:** the A4's filter / drive / delay-send are **NRPN-only** — plain-CC automation cannot reach them, so FLTR/DRV/Dly slider automation is not representable in this export path yet. (Live protocol `control` messages cover them in real time; SMF NRPN automation is future contract work.) Note that bass CC 95 lands on channel 4, which is also Rytm T4's channel — CAT dispatches each CC through its own track's role/device so there is no cross-device leak, but raw-file playback into both devices at once would double-target channel 4.
+
+### 2.6-legacy Recommended CC mapping for Digitone (`train_digitone`)
+
+This table is the mapping for an app targeting the Digitone binding. Other bindings / devices MAY use different mappings (a `.cat.toml` sidecar can override). Apps are free to emit only the subset of automation they care about.
 
 | Source parameter | MIDI channel | CC | Digitone parameter | Value mapping |
 |------------------|--------------|----|--------------------|---------------|
@@ -84,11 +94,11 @@ This table is the **suggested** mapping for an app targeting the first-class Dig
 | Master chorus send (0–1) | 10 (auto) | 26 | `auto.master_chorus_send` | linear 0–127 |
 | Master delay send (0–1) | 10 (auto) | 27 | `auto.master_delay_send` | linear 0–127 |
 
-Channel assignments above match the reference `train_digitone` binding. The CC numbers come from CAT's hardware-verified Digitone profile at `~/cat-library/devices/digitone.toml`.
+Channel assignments above match the reference `train_digitone` binding. The CC numbers come from CAT's hardware-verified Digitone profile at `~/Code/cat-library/devices/digitone.toml`.
 
-**Volume convention.** Born Slippy currently uses **`amp_volume` (CC 7)** for the continuously-modulated per-slot volume and **`track_level` (CC 95)** only as a one-shot init anchor at delta 0 (set to ~100 to ensure audibility regardless of prior device state). The choice is intentional: `amp_volume` affects the synth voice level (audible mix change), `track_level` is the channel-strip fader (a global gain stage that the device can dim mid-performance unexpectedly). Other downstream tools MAY pick a different split; both columns are valid CC-95-vs-CC-7 targets for "volume".
+**Volume convention (superseded 2026-07-22).** The Digitone-era exporter used `amp_volume` (CC 7) for per-slot volume. The current convention — ruled during change 013 — is **track level (CC 95) for lane volume on every binding**: mixer moves are channel-strip moves and must never mutate the sound patch. CC 7 remains valid only for legacy Digitone exports.
 
-**Init anchors.** The reference Born Slippy exporter emits two anchor CCs at delta 0 on every note-bearing track: `track_mute=0` (un-muted) and `track_level=100`. This makes every exported file self-contained — playback is audible regardless of where mute/level were left from a previous session. Downstream tools SHOULD do the same.
+**Init anchors.** The reference Born Slippy exporter emits `track_mute=0` at delta 0 on every voice channel, and the first slot's volume value lands as the CC 95 anchor at delta 0. This makes every exported file self-contained — playback is audible regardless of where mute/level were left from a previous session. Downstream tools SHOULD do the same.
 
 ### 2.7 Optional sidecar `<song>.cat.toml`
 
@@ -145,7 +155,7 @@ For implementors who want to look at working code (none of this is part of the c
 - **CAT-side importer**: `cat.importers.from_midi_pattern` (notes) and `cat.importers.from_midi_cc` (CC events). Source: [`src/cat-py/cat/importers/midi.py`](../src/cat-py/cat/importers/midi.py).
 - **CAT-side CLI**: `cat play-midi`. Source: [`src/cat-py/cat/cli/play_midi.py`](../src/cat-py/cat/cli/play_midi.py).
 - **First-party producer**: Born Slippy's exporter at `/Users/mikkel/Code/born-slippy/src/midi_exporter.js` — ~250 lines, no dependencies, writes SMF type 1 directly. Use it as a reference for hand-rolled implementations.
-- **Round-trip fixture**: [`examples/plugin-import-demo/`](../examples/plugin-import-demo/) contains a 2-slot song generated in Python with mido. The Python builder is a useful sanity check that your exporter is producing the same shape.
+- **Round-trip fixture**: [`examples/demos/plugin-import-demo/`](../examples/demos/plugin-import-demo/) contains a 2-slot song generated in Python with mido. The Python builder is a useful sanity check that your exporter is producing the same shape.
 
 ## 6. Verification recipe
 
@@ -153,7 +163,7 @@ For any new exporter:
 
 1. Generate a small song (1–2 slots / sections).
 2. Parse the file with the language-agnostic check: `python -c "import mido; [print(t.name, sum(1 for _ in t)) for t in mido.MidiFile('<file>.mid').tracks]"`. You should see one track per role plus optionally a meta track.
-3. Run `cat play-midi <file>.mid --binding train_digitone`. Expected output names each mapped track with its trig and CC counts, lists unmapped tracks as warnings, exits 0.
+3. Run `cat play-midi <file>.mid --binding born_slippy_a4_rytm` (or `train_digitone` for the legacy shape). Expected output names each mapped track with its trig and CC counts, lists unmapped tracks as warnings, exits 0.
 4. With hardware connected, listen for: correct rhythm, correct pitches on the bass role, audible parameter motion if your file includes CC events.
 
 ## 7. How to evolve this contract

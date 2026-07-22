@@ -1,56 +1,53 @@
 // Born Slippy → CAT plugin import contract.
 //
-// Hand-rolled Standard MIDI File (SMF type 1) writer. Walks the filled
-// slots in slot-machine order, lays each one out as `seqBars` bars of
-// notes on role-named tracks (drums / bass / pad / lead) plus per-slot
-// CC automation so CAT can replay the song 1:1 with the in-browser
-// performance. Automation per track (CC numbers from
-// ~/cat-library/devices/digitone.toml):
-//   bass:   filter_frequency (CC 23, log-Hz)
-//           delay_send       (CC 13, 0..1)
-//           amp_drive        (CC 9,  0..1)
-//           amp_volume       (CC 7,  bassVol)
-//   drums:  amp_volume       (CC 7,  kickVol)
-//   pad:    amp_volume       (CC 7,  hatVol)
-//   lead:   amp_volume       (CC 7,  clapVol)
-// When `fadeMode` is on, values lerp across each slot boundary over
-// `fadeSteps * STEP_TIME` so CAT reads the transition as a CC ramp.
+// Hand-rolled Standard MIDI File (SMF type 1) writer targeting the
+// `born_slippy_a4_rytm` binding (cat change 013): five role-named
+// tracks — bass / kick / hihat / openhat / clap — so
+// `cat play-midi <file>.mid --binding born_slippy_a4_rytm` plays with
+// zero import code. Walks the filled slots in slot-machine order,
+// laying each out as `seqBars` bars.
 //
-// Spec: /Users/mikkel/Code/cat/spec/openspec/specs/import-system/spec.md
-// § "Plugin import contract".
+// Drum notes are Rytm AUTO-channel trig notes (note = track − 1 picks
+// the voice; manual §8.6), NOT GM pitches — that is what the binding's
+// `rytm.auto` roles dispatch. Bass notes are real pitches (Hz → MIDI).
+//
+// Automation: lane volume as TRACK LEVEL (CC 95) ramps on each voice's
+// OWN channel (CCs dispatch on the file channel, unlike notes — see
+// contract §2.5), plus a CC 94 unmute anchor. The old Digitone bass CC
+// bus (filter 23 / delay 13 / drive 9) is gone: those A4 parameters
+// are NRPN-only, so FLTR/DRV/Delay automation is not representable in
+// this export path yet. When `fadeMode` is on, level values lerp
+// across each slot boundary over `fadeSteps * STEP_TIME` so CAT reads
+// the transition as a CC ramp.
+//
+// Spec: /Users/mikkel/Code/cat/spec/plugin-contract.md (§2) and
+// spec/openspec/changes/013-born-slippy-gateway/.
 
 const TPB = 480;                  // ticks per quarter beat
 const STEPS_PER_BAR = 16;         // 16th-note grid
 const TICKS_PER_STEP = TPB / 4;   // 120 ticks
 const TICKS_PER_BAR = TPB * 4;    // 4 quarters per bar (BS is fixed 4/4)
 
-// Per-role MIDI channel mapping (matches train_digitone binding on Digitone).
-// 0-based for SMF wire encoding.
+// 0-based SMF channels, mirroring ~/Code/cat-library/devices/*.toml:
+// notes ride the binding's channels informationally (CAT re-routes by
+// role name); CCs dispatch on exactly these channels.
 const CH = {
-  drums: 0,    // t1 — channel 1
-  bass: 1,     // t2 — channel 2
-  pad: 2,      // t3 — channel 3
-  lead: 3,     // t4 — channel 4
-  master: 9,   // auto channel 10
+  bass: 3,        // A4 T4 — channel 4 (notes + CC 94/95)
+  drumNotes: 13,  // Rytm AUTO — channel 14 (all drum trig notes)
+  kickCtl: 0,     // Rytm T1/BD — channel 1  (CC 94/95)
+  clapCtl: 3,     // Rytm T4/CP — channel 4  (CC 94/95)
+  hihatCtl: 8,    // Rytm T9/CH — channel 9  (CC 94/95)
+  openhatCtl: 9,  // Rytm T10/OH — channel 10 (CC 94/95)
 };
 
-// Drum pitch assignments (General-MIDI flavour, matches the spec's
-// translation table). Kick on drums; closed + open hats on pad; clap
-// on lead.
-const PITCH = { kick: 36, chat: 42, ohat: 46, clap: 39 };
+// Rytm auto-channel trig notes (track − 1). Hardware-verified 2026-07-22.
+const TRIG = { kick: 0, clap: 3, chat: 8, ohat: 9 };
 
 // ----- Utilities ---------------------------------------------------------
 
 function hzToMidi(freq) {
   // round(69 + 12 * log2(freq / 440))
   return Math.round(69 + 12 * Math.log2(freq / 440));
-}
-
-function filterHzToCC(hz) {
-  // Log scale 50 Hz → 0, 3000 Hz → 127, clamped.
-  const min = 50, max = 3000;
-  const x = Math.max(min, Math.min(max, hz));
-  return Math.round((Math.log2(x / min) / Math.log2(max / min)) * 127);
 }
 
 function unitToCC(v01) {
@@ -155,13 +152,12 @@ function slotPattern(slot, fixedPatterns) {
 
 // ----- Track builders ----------------------------------------------------
 
-// Default per-role anchor: every export plants track_mute=0 and
-// track_level=100 at delta 0 on the role's own channel so the
-// playback is audible regardless of whatever state the device was
-// left in. Slot-level mute/volume overrides come later.
+// Default per-role anchor: every export plants track_mute=0 at delta 0
+// on the voice's own channel so playback is audible regardless of the
+// device's mute state. Track level (CC 95) gets its first anchor from
+// the first slot's volume value, also at delta 0.
 function pushRoleInitCCs(events, channel) {
   events.push(cc(0, channel, 94, 0));     // track_mute = unmuted
-  events.push(cc(0, channel, 95, 100));   // track_level ~= 78% of full
 }
 
 function buildMetaTrack(bpm) {
@@ -188,12 +184,14 @@ function emitCCWithRamp(events, channel, controller, value, prev, slotStartTicks
   return value;
 }
 
-function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, drumPitch, patField, muteField, volField, fadeMode, fadeSteps) {
-  // One note per non-zero step at `drumPitch`. Velocity = stepValue * 127.
-  // AMP volume (CC 7) is anchored or ramped per slot from `volField` in the
-  // channel snapshot. `muteField` suppresses note triggers for that slot.
+function buildDrumNoteTrack(name, noteChannel, ctlChannel, slots, fixedPatterns, seqBars, trigNote, patField, muteField, volField, fadeMode, fadeSteps) {
+  // One note per non-zero step at the lane's Rytm trig note, on the
+  // AUTO channel. Velocity = stepValue * 127. Lane volume rides TRACK
+  // LEVEL (CC 95) on the voice's OWN channel (`ctlChannel`), anchored
+  // or ramped per slot from `volField`. `muteField` suppresses note
+  // triggers for that slot.
   const events = [trackName(0, name)];
-  pushRoleInitCCs(events, channel);
+  pushRoleInitCCs(events, ctlChannel);
   let barOffset = 0;
   let prevVol = null;
   for (const slot of slots) {
@@ -202,7 +200,7 @@ function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, drumPi
     const volValue = unitToCC(slot.channels?.[volField] ?? 0.8);
     const slotStartTicks = barOffset * TICKS_PER_BAR;
 
-    prevVol = emitCCWithRamp(events, channel, 7, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
+    prevVol = emitCCWithRamp(events, ctlChannel, 95, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
 
     for (let bar = 0; bar < seqBars; bar++) {
       for (let step = 0; step < STEPS_PER_BAR; step++) {
@@ -210,47 +208,8 @@ function buildDrumNoteTrack(name, channel, slots, fixedPatterns, seqBars, drumPi
         if (v <= 0 || muteFlag) continue;
         const onTicks = slotStartTicks + bar * TICKS_PER_BAR + step * TICKS_PER_STEP;
         const offTicks = onTicks + Math.round(TICKS_PER_STEP * 0.95);
-        events.push(noteOn(onTicks, channel, drumPitch, unitToCC(v)));
-        events.push(noteOff(offTicks, channel, drumPitch));
-      }
-    }
-    barOffset += seqBars;
-  }
-  events.push(endOfTrack(barOffset * TICKS_PER_BAR));
-  return events;
-}
-
-function buildHatNoteTrack(name, channel, slots, fixedPatterns, seqBars, fadeMode, fadeSteps) {
-  // Two layers — closed + open — at GM-style hi-hat pitches on the same
-  // channel. AMP volume (CC 7) ramped per slot from hatVol.
-  const events = [trackName(0, name)];
-  pushRoleInitCCs(events, channel);
-  let barOffset = 0;
-  let prevVol = null;
-  for (const slot of slots) {
-    const pat = slotPattern(slot, fixedPatterns);
-    const muted = slot.channels?.hatMute;
-    const volValue = unitToCC(slot.channels?.hatVol ?? 0.8);
-    const slotStartTicks = barOffset * TICKS_PER_BAR;
-
-    prevVol = emitCCWithRamp(events, channel, 7, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
-
-    if (!muted) {
-      for (let bar = 0; bar < seqBars; bar++) {
-        for (let step = 0; step < STEPS_PER_BAR; step++) {
-          const onTicks = slotStartTicks + bar * TICKS_PER_BAR + step * TICKS_PER_STEP;
-          const offTicks = onTicks + Math.round(TICKS_PER_STEP * 0.95);
-          const ch_v = pat.chat?.[step] || 0;
-          if (ch_v > 0) {
-            events.push(noteOn(onTicks, channel, PITCH.chat, unitToCC(ch_v)));
-            events.push(noteOff(offTicks, channel, PITCH.chat));
-          }
-          const oh_v = pat.ohat?.[step] || 0;
-          if (oh_v > 0) {
-            events.push(noteOn(onTicks, channel, PITCH.ohat, unitToCC(oh_v)));
-            events.push(noteOff(offTicks, channel, PITCH.ohat));
-          }
-        }
+        events.push(noteOn(onTicks, noteChannel, trigNote, unitToCC(v)));
+        events.push(noteOff(offTicks, noteChannel, trigNote));
       }
     }
     barOffset += seqBars;
@@ -260,30 +219,21 @@ function buildHatNoteTrack(name, channel, slots, fixedPatterns, seqBars, fadeMod
 }
 
 function buildBassTrack(name, channel, slots, fixedPatterns, seqBars, fadeMode, fadeSteps) {
-  // Bass notes (Hz → MIDI pitch) plus the full bass-channel CC bus:
-  //   CC 23 filter_frequency  (filterMute → floor 80 Hz)
-  //   CC 13 delay_send        (delayMute → 0)
-  //   CC 9  amp_drive         (driveMute → 0)
-  //   CC 7  amp_volume        (bassVol; channel mute is per-step, not on volume)
-  // All four ramp between slots when fadeMode is on.
+  // Bass notes (Hz → MIDI pitch, velocity from the accent lane) plus
+  // TRACK LEVEL (CC 95) ramps from bassVol. The A4's filter / drive /
+  // delay-send are NRPN-only, so the FLTR/DRV/Dly slider automation is
+  // deliberately NOT exported (see header note).
   const events = [trackName(0, name)];
   pushRoleInitCCs(events, channel);
   let barOffset = 0;
-  let prevFilter = null, prevDelay = null, prevDrive = null, prevVol = null;
+  let prevVol = null;
   for (const slot of slots) {
     const pat = slotPattern(slot, fixedPatterns);
     const muted = slot.channels?.bassMute;
-    const filterHz = slot.channels?.filterMute ? 80 : (slot.channels?.filterCut ?? 800);
-    const filterValue = filterHzToCC(filterHz);
-    const delayValue = unitToCC(slot.channels?.delayMute ? 0 : (slot.channels?.delayMix ?? 0.25));
-    const driveValue = unitToCC(slot.channels?.driveMute ? 0 : (slot.channels?.drive ?? 0.3));
     const volValue = unitToCC(slot.channels?.bassVol ?? 0.8);
     const slotStartTicks = barOffset * TICKS_PER_BAR;
 
-    prevFilter = emitCCWithRamp(events, channel, 23, filterValue, prevFilter, slotStartTicks, fadeMode, fadeSteps);
-    prevDelay  = emitCCWithRamp(events, channel, 13, delayValue,  prevDelay,  slotStartTicks, fadeMode, fadeSteps);
-    prevDrive  = emitCCWithRamp(events, channel, 9,  driveValue,  prevDrive,  slotStartTicks, fadeMode, fadeSteps);
-    prevVol    = emitCCWithRamp(events, channel, 7,  volValue,    prevVol,    slotStartTicks, fadeMode, fadeSteps);
+    prevVol = emitCCWithRamp(events, channel, 95, volValue, prevVol, slotStartTicks, fadeMode, fadeSteps);
 
     for (let bar = 0; bar < seqBars; bar++) {
       for (let step = 0; step < STEPS_PER_BAR; step++) {
@@ -372,10 +322,11 @@ export function exportSongToMidi({
 
   const trackLists = [
     buildMetaTrack(bpm),
-    buildDrumNoteTrack("drums", CH.drums, filled, fixedPatterns, seqBars, PITCH.kick, "kick", "kickMute", "kickVol", fadeMode, fadeSteps),
     buildBassTrack("bass", CH.bass, filled, fixedPatterns, seqBars, fadeMode, fadeSteps),
-    buildHatNoteTrack("pad", CH.pad, filled, fixedPatterns, seqBars, fadeMode, fadeSteps),
-    buildDrumNoteTrack("lead", CH.lead, filled, fixedPatterns, seqBars, PITCH.clap, "clap", "clapMute", "clapVol", fadeMode, fadeSteps),
+    buildDrumNoteTrack("kick", CH.drumNotes, CH.kickCtl, filled, fixedPatterns, seqBars, TRIG.kick, "kick", "kickMute", "kickVol", fadeMode, fadeSteps),
+    buildDrumNoteTrack("hihat", CH.drumNotes, CH.hihatCtl, filled, fixedPatterns, seqBars, TRIG.chat, "chat", "hatMute", "hatVol", fadeMode, fadeSteps),
+    buildDrumNoteTrack("openhat", CH.drumNotes, CH.openhatCtl, filled, fixedPatterns, seqBars, TRIG.ohat, "ohat", "hatMute", "hatVol", fadeMode, fadeSteps),
+    buildDrumNoteTrack("clap", CH.drumNotes, CH.clapCtl, filled, fixedPatterns, seqBars, TRIG.clap, "clap", "clapMute", "clapVol", fadeMode, fadeSteps),
   ];
   return assembleSMF(trackLists);
 }
