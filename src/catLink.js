@@ -165,17 +165,25 @@ class CatLink {
     }, 30);
   }
 
+  // Send-ahead entry: the app calls this at SCHEDULING time with the
+  // note's remaining delay — the gateway's asyncio timer (~1 ms) fires
+  // it, replacing browser setTimeout jitter (measured up to 30 ms).
+  scheduleBytes(bytes, inMs) {
+    this._sendBytes(bytes, Math.max(0, Math.round(inMs)));
+  }
+
   // App channel map: kick=1, bass=2, hats=3 (note 42 closed / 46 open), clap=4.
-  _sendBytes(bytes) {
+  _sendBytes(bytes, inMs = 0) {
     const [status, d1, d2] = bytes;
     if ((status & 0xf0) !== 0x90 || !d2) return; // NoteOn only; drop off/CC/clock
     const channel = (status & 0x0f) + 1;
+    const ahead = inMs > 2 ? { in_ms: inMs } : {};
     if (channel === 2) {
       // 100 ms gate — parity with the app's own Web MIDI note-off, and
       // critically SHORTER than a 16th step up to 150 BPM: an overlapping
       // gate forces the mono A4 voice into legato (no envelope
       // retrigger), which sounds sloppy on driving basslines.
-      this._json({ type: 'note', lane: 'bass', note: d1, velocity: d2, duration_ms: 100 });
+      this._json({ type: 'note', lane: 'bass', note: d1, velocity: d2, duration_ms: 100, ...ahead });
       return;
     }
     const lane =
@@ -183,7 +191,7 @@ class CatLink {
       : channel === 4 ? 'clap'
       : channel === 3 ? (d1 === 46 ? 'openhat' : 'hihat')
       : null;
-    if (lane) this._json({ type: 'trigger', lane, velocity: d2 });
+    if (lane) this._json({ type: 'trigger', lane, velocity: d2, ...ahead });
   }
 }
 

@@ -257,6 +257,16 @@ export default function App() {
     const vel = Math.floor(velocity * 127);
     const ctx = ctxRef.current;
     const delay = ctx ? Math.max(0, (time - ctx.currentTime) * 1000) : 0;
+    if (output.id === CAT_OUTPUT_ID) {
+      // CAT path: ship NOW with the remaining delay — the gateway's
+      // timer fires it with ~1 ms precision, so no setTimeout jitter.
+      catLink.scheduleBytes([0x90 + channel - 1, note, vel], delay);
+      if (midiLogRef.current) {
+        const ts = new Date().toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+        setMidiLogEntries(prev => [...prev, `${ts}  NoteOn  ch${channel} (${channelNames[channel]||'?'})  note=${note}  vel=${vel}  (+${Math.round(delay)}ms sched)`]);
+      }
+      return;
+    }
     const send = () => {
       const out = selectedMidiOutputRef.current;
       if (!out) return;
