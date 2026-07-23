@@ -171,7 +171,11 @@ class CatLink {
     if ((status & 0xf0) !== 0x90 || !d2) return; // NoteOn only; drop off/CC/clock
     const channel = (status & 0x0f) + 1;
     if (channel === 2) {
-      this._json({ type: 'note', lane: 'bass', note: d1, velocity: d2, duration_ms: 150 });
+      // 100 ms gate — parity with the app's own Web MIDI note-off, and
+      // critically SHORTER than a 16th step up to 150 BPM: an overlapping
+      // gate forces the mono A4 voice into legato (no envelope
+      // retrigger), which sounds sloppy on driving basslines.
+      this._json({ type: 'note', lane: 'bass', note: d1, velocity: d2, duration_ms: 100 });
       return;
     }
     const lane =
