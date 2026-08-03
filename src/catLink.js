@@ -4,9 +4,11 @@
 // running `cat gateway`. Exposes a Web-MIDI-shaped pseudo-output so the
 // app's existing raw-byte send path plugs in unchanged: NoteOn bytes on
 // the app's fixed channels translate to lane events (lanes, not
-// channels, cross the wire — CAT owns hardware routing). NoteOffs, CC,
-// and clock bytes are dropped: the gateway owns note lengths, and CC /
-// transport are out of scope in M1.
+// channels, cross the wire — CAT owns hardware routing). NoteOffs and
+// CC are dropped (the gateway owns note lengths). Transport (013
+// amendment C): Start/Stop bytes become one `transport` message with
+// the session BPM — the gateway generates its own steady 24 ppqn clock
+// (browser clock ticks are jitter-bound and are swallowed here).
 
 export const CAT_OUTPUT_ID = '__cat__';
 const DEFAULT_URL = 'ws://127.0.0.1:8766/ws';
@@ -27,6 +29,7 @@ class CatLink {
     this._reconnectTimer = null;
     this._pendingControls = new Map();
     this._controlTimer = null;
+    this.bpm = null; // App keeps this current; sent with transport start
     this.output = {
       id: CAT_OUTPUT_ID,
       name: 'CAT (localhost)',
@@ -175,7 +178,16 @@ class CatLink {
   // App channel map: kick=1, bass=2, hats=3 (note 42 closed / 46 open), clap=4.
   _sendBytes(bytes, inMs = 0) {
     const [status, d1, d2] = bytes;
-    if ((status & 0xf0) !== 0x90 || !d2) return; // NoteOn only; drop off/CC/clock
+    if (status === 0xfa) { // Start -> rig-wide transport (gateway makes the clock)
+      this._json({ type: 'transport', cmd: 'start', bpm: this.bpm || 120 });
+      return;
+    }
+    if (status === 0xfc) {
+      this._json({ type: 'transport', cmd: 'stop' });
+      return;
+    }
+    if (status === 0xf8) return; // browser clock ticks: jitter, swallowed
+    if ((status & 0xf0) !== 0x90 || !d2) return; // NoteOn only; drop off/CC
     const channel = (status & 0x0f) + 1;
     const ahead = inMs > 2 ? { in_ms: inMs } : {};
     if (channel === 2) {

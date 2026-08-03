@@ -235,6 +235,7 @@ export default function App() {
 
   const [catState, setCatState] = useState({ status: 'off', routes: null, binding: null, lastError: null });
   useEffect(() => catLink.subscribe(setCatState), []);
+  useEffect(() => { catLink.bpm = bpm; }, [bpm]); // transport start carries session BPM
   useEffect(() => {
     if (selectedMidiOutput?.id === CAT_OUTPUT_ID) catLink.connect();
     else catLink.disconnect();
